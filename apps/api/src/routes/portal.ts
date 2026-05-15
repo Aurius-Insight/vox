@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { env } from '../config/env.js';
 import { prisma } from '../db/client.js';
@@ -21,6 +22,34 @@ const router = Router();
 
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 const magicLinkKey = (token: string) => `magic:${token}`;
+
+const SERIALIZATION_FAILURE_CODE = 'P2034';
+const MAX_BOOKING_RETRIES = 3;
+
+/**
+ * Roda uma transacao com isolation `Serializable` e relenta caso o Postgres
+ * aborte por conflito de serializacao (codigo Prisma `P2034`). Necessario
+ * para impedir over-booking quando dois alunos disputam a ultima vaga.
+ */
+async function withSerializableRetry<T>(
+  run: (tx: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_BOOKING_RETRIES; attempt++) {
+    try {
+      return await prisma.$transaction(run, { isolationLevel: 'Serializable' });
+    } catch (error) {
+      lastError = error;
+      const isSerializationFailure =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === SERIALIZATION_FAILURE_CODE;
+      if (!isSerializationFailure || attempt === MAX_BOOKING_RETRIES - 1) throw error;
+      // Backoff curto pra dar tempo do "vencedor" commitar antes da retentativa.
+      await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
 
 const MagicLinkSchema = z.object({
   cpf: z.string().min(11).max(14),
@@ -180,14 +209,29 @@ router.get(
       },
     });
 
+    // Agendamentos ativos do aluno (com horario), usados para detectar overlap
+    // contra cada aula candidata em memoria — evita N+1 consultas.
+    const studentBookings = await prisma.classBooking.findMany({
+      where: { studentId: student.id, status: 'agendado' },
+      include: { classSession: { select: { id: true, startsAt: true, endsAt: true } } },
+    });
+
     const upcoming = classSessions.map((classSession) => {
       const bookedCount = classSession.bookings.length;
       const isBooked = classSession.bookings.some((booking) => booking.studentId === student.id);
+      // Dois intervalos [A1,A2] e [B1,B2] se sobrepoem quando A1 < B2 e B1 < A2.
+      const hasOverlap = studentBookings.some(
+        (booking) =>
+          booking.classSession.id !== classSession.id &&
+          booking.classSession.startsAt < classSession.endsAt &&
+          booking.classSession.endsAt > classSession.startsAt,
+      );
       const bookable = canBookClass({
         creditBalance: student.creditBalance,
         bookedCount,
         capacity: classSession.capacity,
         isBooked,
+        hasOverlap,
         startsAt: classSession.startsAt,
       });
 
@@ -218,6 +262,11 @@ const bookingErrorMap: Record<string, { status: number; code: string; message: s
   class_full: { status: 409, code: 'class_full', message: 'Aula sem vagas disponiveis.' },
   already_booked: { status: 409, code: 'already_booked', message: 'Voce ja esta agendado nesta aula.' },
   class_started: { status: 409, code: 'class_started', message: 'Aula ja iniciada ou encerrada.' },
+  time_conflict: {
+    status: 409,
+    code: 'time_conflict',
+    message: 'Voce ja tem uma aula agendada nesse horario.',
+  },
   not_booked: { status: 409, code: 'not_booked', message: 'Voce nao tem agendamento nesta aula.' },
   class_not_found: { status: 404, code: 'class_not_found', message: 'Aula nao encontrada.' },
   student_not_found: { status: 404, code: 'student_not_found', message: 'Aluno nao encontrado.' },
@@ -239,7 +288,7 @@ router.post(
     const studentId = req.student!.id;
     const { classId } = req.params;
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await withSerializableRetry(async (tx) => {
       const student = await tx.student.findFirst({ where: { id: studentId, active: true } });
       if (!student) return { ok: false as const, error: 'student_not_found' as const };
 
@@ -251,12 +300,27 @@ router.post(
       });
       if (!classSession) return { ok: false as const, error: 'class_not_found' as const };
 
+      // Procura agendamento ativo do aluno em outra aula com horario sobreposto.
+      const overlapping = await tx.classBooking.findFirst({
+        where: {
+          studentId,
+          status: 'agendado',
+          classSessionId: { not: classId },
+          classSession: {
+            startsAt: { lt: classSession.endsAt },
+            endsAt: { gt: classSession.startsAt },
+          },
+        },
+        select: { id: true },
+      });
+
       const isBooked = classSession.bookings.some((booking) => booking.studentId === studentId);
       const check = canBookClass({
         creditBalance: student.creditBalance,
         bookedCount: classSession.bookings.length,
         capacity: classSession.capacity,
         isBooked,
+        hasOverlap: overlapping !== null,
         startsAt: classSession.startsAt,
       });
       if (!check.ok) return { ok: false as const, error: check.reason };

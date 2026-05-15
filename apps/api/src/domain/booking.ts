@@ -1,6 +1,9 @@
 export type BookingCheck =
   | { ok: true }
-  | { ok: false; reason: 'no_credit' | 'class_full' | 'already_booked' | 'class_started' };
+  | {
+      ok: false;
+      reason: 'no_credit' | 'class_full' | 'already_booked' | 'class_started' | 'time_conflict';
+    };
 
 export type CancelCheck =
   | { ok: true }
@@ -11,15 +14,19 @@ export type CancelCheck =
  *
  * - Aula que ja comecou nao aceita novo agendamento.
  * - Aluno nao pode agendar a mesma aula duas vezes.
+ * - Aluno nao pode ter duas aulas no mesmo horario (overlap entre `startsAt`
+ *   e `endsAt` de qualquer agendamento ativo). O caller calcula `hasOverlap`
+ *   consultando o banco; aqui ele entra como entrada pura.
  * - Aula cheia nao aceita novo agendamento.
- * - Aluno sem saldo nao pode agendar aula regular (o credito so e
- *   consumido na presenca, mas o saldo precisa existir no agendamento).
+ * - Aluno sem saldo nao pode agendar aula regular (o credito so e consumido
+ *   na presenca, mas o saldo precisa existir no agendamento).
  */
 export function canBookClass(input: {
   creditBalance: number;
   bookedCount: number;
   capacity: number;
   isBooked: boolean;
+  hasOverlap: boolean;
   startsAt: Date;
   now?: Date;
 }): BookingCheck {
@@ -27,6 +34,7 @@ export function canBookClass(input: {
 
   if (input.startsAt <= now) return { ok: false, reason: 'class_started' };
   if (input.isBooked) return { ok: false, reason: 'already_booked' };
+  if (input.hasOverlap) return { ok: false, reason: 'time_conflict' };
   if (input.bookedCount >= input.capacity) return { ok: false, reason: 'class_full' };
   if (input.creditBalance <= 0) return { ok: false, reason: 'no_credit' };
 
