@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { AppUser, ClassSession, Subject, Unit } from '../api/types';
-import { formatDateTime, localInputToIso } from '../lib/format';
+import { formatDateTime, isoToLocalInput, localInputToIso } from '../lib/format';
 
 type ClassForm = {
   isGuest: boolean;
@@ -12,6 +12,14 @@ type ClassForm = {
   startsAt: string;
   endsAt: string;
   capacity: string;
+};
+
+type EditForm = {
+  room: string;
+  capacity: string;
+  startsAt: string;
+  endsAt: string;
+  teacherUserId: string;
 };
 
 const EMPTY_FORM: ClassForm = {
@@ -32,7 +40,19 @@ export function AgendaPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [form, setForm] = useState<ClassForm>(EMPTY_FORM);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Edicao inline: quando setado, esconde o "Nova aula" e mostra "Editar aula".
+  const [editingClass, setEditingClass] = useState<ClassSession>();
+  const [editForm, setEditForm] = useState<EditForm>({
+    room: '',
+    capacity: '',
+    startsAt: '',
+    endsAt: '',
+    teacherUserId: '',
+  });
+  const [editSaving, setEditSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +79,10 @@ export function AgendaPage() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function updateEdit<K extends keyof EditForm>(field: K, value: EditForm[K]) {
+    setEditForm((current) => ({ ...current, [field]: value }));
+  }
+
   // Decisao da reuniao: a agenda e por materia, e o professor representa a
   // materia. Ao trocar a materia, o professor selecionado e limpo.
   function handleSubjectChange(subjectId: string) {
@@ -66,10 +90,14 @@ export function AgendaPage() {
   }
 
   const availableTeachers = teachers.filter((teacher) => teacher.subjectId === form.subjectId);
+  const editAvailableTeachers = teachers.filter(
+    (teacher) => teacher.subjectId === editingClass?.subjectId,
+  );
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
+    setInfo('');
     setSaving(true);
 
     try {
@@ -95,6 +123,72 @@ export function AgendaPage() {
     }
   }
 
+  function startEdit(classSession: ClassSession) {
+    setError('');
+    setInfo('');
+    setEditingClass(classSession);
+    setEditForm({
+      room: classSession.room,
+      capacity: String(classSession.capacity),
+      startsAt: isoToLocalInput(classSession.startsAt),
+      endsAt: isoToLocalInput(classSession.endsAt),
+      teacherUserId: classSession.teacherUserId ?? '',
+    });
+  }
+
+  function cancelEdit() {
+    setEditingClass(undefined);
+    setError('');
+  }
+
+  async function handleSaveEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!editingClass) return;
+    setError('');
+    setEditSaving(true);
+
+    try {
+      const body: Record<string, unknown> = {
+        room: editForm.room,
+        capacity: Number(editForm.capacity),
+        startsAt: localInputToIso(editForm.startsAt),
+        endsAt: localInputToIso(editForm.endsAt),
+      };
+      // Professor so faz parte do payload em aula regular E quando muda — evita
+      // mandar string vazia em aula de convidado.
+      if (!editingClass.isGuest && editForm.teacherUserId) {
+        body.teacherUserId = editForm.teacherUserId;
+      }
+      await api<{ data: ClassSession }>(`/api/classes/${editingClass.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      cancelEdit();
+      await load();
+      setInfo('Aula atualizada.');
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleCancelClass(classSession: ClassSession) {
+    const proceed = window.confirm(
+      `Cancelar a aula "${classSession.displayName}" de ${formatDateTime(classSession.startsAt)}?\n` +
+        'Todos os agendamentos ativos desta aula serao cancelados.',
+    );
+    if (!proceed) return;
+    setError('');
+    try {
+      await api(`/api/classes/${classSession.id}`, { method: 'DELETE' });
+      setInfo('Aula cancelada.');
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel cancelar.');
+    }
+  }
+
   return (
     <main className="app-page">
       <header className="page-header">
@@ -105,118 +199,195 @@ export function AgendaPage() {
       </header>
 
       {error && <p className="form-error">{error}</p>}
+      {info && <p className="form-info">{info}</p>}
 
-      <section className="form-card">
-        <h2>Nova aula</h2>
-        <form className="grid-form" onSubmit={handleSubmit}>
-          <div className="role-options">
+      {editingClass ? (
+        <section className="form-card">
+          <h2>Editar aula — {editingClass.displayName}</h2>
+          <p className="muted-text">
+            Unidade ({editingClass.unitName ?? '-'}) e materia nao sao editaveis. Pra mudar,
+            cancele esta aula e crie uma nova.
+          </p>
+          <form className="grid-form" onSubmit={handleSaveEdit}>
             <label>
+              Sala
               <input
-                type="checkbox"
-                checked={form.isGuest}
-                onChange={(event) => updateField('isGuest', event.target.checked)}
+                value={editForm.room}
+                onChange={(event) => updateEdit('room', event.target.value)}
+                required
               />
-              Aula com professor convidado
             </label>
-          </div>
-
-          {!form.isGuest && (
-            <>
-              <label>
-                Materia
-                <select
-                  value={form.subjectId}
-                  onChange={(event) => handleSubjectChange(event.target.value)}
-                  required
-                >
-                  <option value="">Selecione</option>
-                  {subjects.map((subject) => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <label>
+              Capacidade
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={editForm.capacity}
+                onChange={(event) => updateEdit('capacity', event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Inicio
+              <input
+                type="datetime-local"
+                value={editForm.startsAt}
+                onChange={(event) => updateEdit('startsAt', event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Termino
+              <input
+                type="datetime-local"
+                value={editForm.endsAt}
+                onChange={(event) => updateEdit('endsAt', event.target.value)}
+                required
+              />
+            </label>
+            {!editingClass.isGuest && (
               <label>
                 Professor
                 <select
-                  value={form.teacherUserId}
-                  onChange={(event) => updateField('teacherUserId', event.target.value)}
+                  value={editForm.teacherUserId}
+                  onChange={(event) => updateEdit('teacherUserId', event.target.value)}
                   required
-                  disabled={!form.subjectId}
                 >
-                  <option value="">
-                    {form.subjectId ? 'Selecione' : 'Escolha a materia primeiro'}
-                  </option>
-                  {availableTeachers.map((teacher) => (
+                  <option value="">Selecione</option>
+                  {editAvailableTeachers.map((teacher) => (
                     <option key={teacher.id} value={teacher.id}>
                       {teacher.name}
                     </option>
                   ))}
                 </select>
               </label>
-            </>
-          )}
+            )}
+            <div className="grid-form-actions">
+              <div className="row-actions">
+                <button type="submit" disabled={editSaving}>
+                  {editSaving ? 'Salvando...' : 'Salvar alteracoes'}
+                </button>
+                <button type="button" className="secondary-button" onClick={cancelEdit}>
+                  Cancelar edicao
+                </button>
+              </div>
+            </div>
+          </form>
+        </section>
+      ) : (
+        <section className="form-card">
+          <h2>Nova aula</h2>
+          <form className="grid-form" onSubmit={handleSubmit}>
+            <div className="role-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.isGuest}
+                  onChange={(event) => updateField('isGuest', event.target.checked)}
+                />
+                Aula com professor convidado
+              </label>
+            </div>
 
-          <label>
-            Unidade
-            <select
-              value={form.unitId}
-              onChange={(event) => updateField('unitId', event.target.value)}
-              required
-            >
-              <option value="">Selecione</option>
-              {units.map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Sala
-            <input
-              value={form.room}
-              onChange={(event) => updateField('room', event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Inicio
-            <input
-              type="datetime-local"
-              value={form.startsAt}
-              onChange={(event) => updateField('startsAt', event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Termino
-            <input
-              type="datetime-local"
-              value={form.endsAt}
-              onChange={(event) => updateField('endsAt', event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            Capacidade
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={form.capacity}
-              onChange={(event) => updateField('capacity', event.target.value)}
-              required
-            />
-          </label>
-          <div className="grid-form-actions">
-            <button type="submit" disabled={saving}>
-              {saving ? 'Salvando...' : 'Criar aula'}
-            </button>
-          </div>
-        </form>
-      </section>
+            {!form.isGuest && (
+              <>
+                <label>
+                  Materia
+                  <select
+                    value={form.subjectId}
+                    onChange={(event) => handleSubjectChange(event.target.value)}
+                    required
+                  >
+                    <option value="">Selecione</option>
+                    {subjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Professor
+                  <select
+                    value={form.teacherUserId}
+                    onChange={(event) => updateField('teacherUserId', event.target.value)}
+                    required
+                    disabled={!form.subjectId}
+                  >
+                    <option value="">
+                      {form.subjectId ? 'Selecione' : 'Escolha a materia primeiro'}
+                    </option>
+                    {availableTeachers.map((teacher) => (
+                      <option key={teacher.id} value={teacher.id}>
+                        {teacher.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+
+            <label>
+              Unidade
+              <select
+                value={form.unitId}
+                onChange={(event) => updateField('unitId', event.target.value)}
+                required
+              >
+                <option value="">Selecione</option>
+                {units.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Sala
+              <input
+                value={form.room}
+                onChange={(event) => updateField('room', event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Inicio
+              <input
+                type="datetime-local"
+                value={form.startsAt}
+                onChange={(event) => updateField('startsAt', event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Termino
+              <input
+                type="datetime-local"
+                value={form.endsAt}
+                onChange={(event) => updateField('endsAt', event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Capacidade
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={form.capacity}
+                onChange={(event) => updateField('capacity', event.target.value)}
+                required
+              />
+            </label>
+            <div className="grid-form-actions">
+              <button type="submit" disabled={saving}>
+                {saving ? 'Salvando...' : 'Criar aula'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       <section className="table-card">
         <table>
@@ -228,12 +399,13 @@ export function AgendaPage() {
               <th>Sala</th>
               <th>Inicio</th>
               <th>Ocupacao</th>
+              <th>Acoes</th>
             </tr>
           </thead>
           <tbody>
             {classes.length === 0 && (
               <tr>
-                <td colSpan={6}>Nenhuma aula cadastrada.</td>
+                <td colSpan={7}>Nenhuma aula cadastrada.</td>
               </tr>
             )}
             {classes.map((classSession) => (
@@ -245,6 +417,24 @@ export function AgendaPage() {
                 <td>{formatDateTime(classSession.startsAt)}</td>
                 <td>
                   {classSession.bookedCount}/{classSession.capacity}
+                </td>
+                <td>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => startEdit(classSession)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button danger-button"
+                      onClick={() => void handleCancelClass(classSession)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

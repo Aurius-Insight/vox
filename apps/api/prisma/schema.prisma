@@ -108,17 +108,18 @@ model Student {
 }
 
 model ClassSession {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   subjectId     String?
   unitId        String?
-  isGuest       Boolean  @default(false)
+  isGuest       Boolean   @default(false)
   room          String
   teacherUserId String?
   startsAt      DateTime
   endsAt        DateTime
   capacity      Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  canceledAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   subject       Subject?       @relation(fields: [subjectId], references: [id])
   unit          Unit?          @relation(fields: [unitId], references: [id])

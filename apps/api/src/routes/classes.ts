@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler, maskPhone } from '../lib/http.js';
 import { resolveAttendanceCredit } from '../domain/attendance.js';
 import { isProfessorScoped, resolveUnitScope } from '../domain/access.js';
+import { canEditClass } from '../domain/class.js';
 
 const router = Router();
 
@@ -13,6 +14,18 @@ const AttendanceSchema = z.object({
   studentId: z.string().min(1),
   status: z.enum(['presente', 'no_show']),
 });
+
+const UpdateClassSchema = z
+  .object({
+    room: z.string().min(1).max(80).optional(),
+    capacity: z.number().int().min(1).max(200).optional(),
+    startsAt: z.string().datetime().optional(),
+    endsAt: z.string().datetime().optional(),
+    teacherUserId: z.string().optional(),
+  })
+  .refine((data) => Object.values(data).some((value) => value !== undefined), {
+    message: 'Informe ao menos um campo para atualizar.',
+  });
 
 const CreateClassSchema = z.object({
   isGuest: z.boolean().default(false),
@@ -40,6 +53,8 @@ type ClassWithRelations = Prisma.ClassSessionGetPayload<{ include: typeof classI
 async function listClasses(filter: { teacherUserId?: string; unitId?: string }) {
   return prisma.classSession.findMany({
     where: {
+      // Aulas canceladas saem da visao padrao da operacao.
+      canceledAt: null,
       ...(filter.teacherUserId ? { teacherUserId: filter.teacherUserId } : {}),
       ...(filter.unitId ? { unitId: filter.unitId } : {}),
     },
@@ -307,6 +322,161 @@ router.post(
         },
       },
     });
+  }),
+);
+
+router.patch(
+  '/:classId',
+  requireAuth,
+  requireRole('diretor', 'coordenacao'),
+  asyncHandler(async (req, res) => {
+    const input = UpdateClassSchema.parse(req.body);
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const existing = await prisma.classSession.findUnique({
+      where: { id: req.params.classId },
+      include: {
+        bookings: { where: { status: 'agendado' }, select: { id: true } },
+      },
+    });
+    if (!existing) throw new ApiError(404, 'class_not_found', 'Aula nao encontrada.');
+    if (unitScope && existing.unitId !== unitScope) {
+      throw new ApiError(403, 'unit_scope', 'Aula fora da sua unidade.');
+    }
+
+    // Se a janela esta sendo alterada, valida que termino > inicio com os
+    // valores efetivos (mistura entre novos e os atuais).
+    const nextStartsAt = input.startsAt ? new Date(input.startsAt) : existing.startsAt;
+    const nextEndsAt = input.endsAt ? new Date(input.endsAt) : existing.endsAt;
+    if (nextEndsAt <= nextStartsAt) {
+      throw new ApiError(400, 'invalid_class_window', 'Horario de termino deve ser depois do inicio.');
+    }
+
+    // Resolve o professor proposto (se mudou) para alimentar `canEditClass`.
+    let nextTeacher: { id: string; subjectId: string | null } | null = null;
+    if (input.teacherUserId && input.teacherUserId !== existing.teacherUserId) {
+      const teacher = await prisma.user.findFirst({
+        where: { id: input.teacherUserId, active: true, roles: { has: 'professor' } },
+        select: { id: true, subjectId: true },
+      });
+      if (!teacher) throw new ApiError(404, 'teacher_not_found', 'Professor nao encontrado.');
+      nextTeacher = teacher;
+    }
+
+    const check = canEditClass({
+      canceledAt: existing.canceledAt,
+      bookedCount: existing.bookings.length,
+      nextCapacity: input.capacity,
+      isGuest: existing.isGuest,
+      classSubjectId: existing.subjectId,
+      nextTeacher,
+    });
+    if (!check.ok) {
+      const map: Record<string, { status: number; code: string; message: string }> = {
+        class_canceled: { status: 409, code: 'class_canceled', message: 'Aula ja cancelada — nao aceita edicao.' },
+        capacity_below_booked: {
+          status: 409,
+          code: 'capacity_below_booked',
+          message: 'A nova capacidade nao pode ser menor que a quantidade ja agendada.',
+        },
+        teacher_does_not_teach_subject: {
+          status: 400,
+          code: 'teacher_subject_mismatch',
+          message: 'O professor selecionado nao leciona essa materia.',
+        },
+      };
+      const err = map[check.reason];
+      throw new ApiError(err.status, err.code, err.message);
+    }
+
+    const data: Prisma.ClassSessionUpdateInput = {};
+    if (input.room !== undefined) data.room = input.room;
+    if (input.capacity !== undefined) data.capacity = input.capacity;
+    if (input.startsAt !== undefined) data.startsAt = nextStartsAt;
+    if (input.endsAt !== undefined) data.endsAt = nextEndsAt;
+    if (nextTeacher) data.teacher = { connect: { id: nextTeacher.id } };
+
+    const updated = await prisma.classSession.update({
+      where: { id: existing.id },
+      data,
+      include: classInclude,
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: req.user!.id,
+        actorType: 'user',
+        entityType: 'class_session',
+        entityId: updated.id,
+        action: 'class.updated',
+        before: { ...existing, bookings: undefined },
+        after: { ...updated, bookings: undefined },
+      },
+    });
+
+    res.json({ data: toClassDto(updated) });
+  }),
+);
+
+router.delete(
+  '/:classId',
+  requireAuth,
+  requireRole('diretor', 'coordenacao'),
+  asyncHandler(async (req, res) => {
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const classSession = await tx.classSession.findUnique({
+        where: { id: req.params.classId },
+      });
+      if (!classSession) return { ok: false as const, error: 'class_not_found' as const };
+      if (unitScope && classSession.unitId !== unitScope) {
+        return { ok: false as const, error: 'unit_scope' as const };
+      }
+      if (classSession.canceledAt) {
+        return { ok: false as const, error: 'class_canceled' as const };
+      }
+
+      const now = new Date();
+
+      // Cancela em cascata todos os agendamentos ativos. Nao mexe em saldo
+      // porque o credito so e consumido na presenca confirmada.
+      await tx.classBooking.updateMany({
+        where: { classSessionId: classSession.id, status: 'agendado' },
+        data: { status: 'cancelado', canceledAt: now },
+      });
+
+      const updated = await tx.classSession.update({
+        where: { id: classSession.id },
+        data: { canceledAt: now },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'class_session',
+          entityId: updated.id,
+          action: 'class.canceled',
+          before: classSession,
+          after: updated,
+        },
+      });
+
+      return { ok: true as const, classSession: updated };
+    });
+
+    if (!result.ok) {
+      if (result.error === 'class_not_found') {
+        throw new ApiError(404, 'class_not_found', 'Aula nao encontrada.');
+      }
+      if (result.error === 'unit_scope') {
+        throw new ApiError(403, 'unit_scope', 'Aula fora da sua unidade.');
+      }
+      throw new ApiError(409, 'class_canceled', 'Aula ja estava cancelada.');
+    }
+
+    res.json({ data: { id: result.classSession.id, canceledAt: result.classSession.canceledAt } });
   }),
 );
 

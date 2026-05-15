@@ -194,6 +194,7 @@ router.get(
     const classSessions = await prisma.classSession.findMany({
       where: {
         startsAt: { gte: new Date() },
+        canceledAt: null,
       },
       orderBy: { startsAt: 'asc' },
       include: {
@@ -298,7 +299,11 @@ router.post(
           bookings: { where: { status: 'agendado' }, select: { studentId: true } },
         },
       });
-      if (!classSession) return { ok: false as const, error: 'class_not_found' as const };
+      // Aula inexistente OU cancelada: trata como "nao encontrada" do ponto de
+      // vista do aluno (evita enumeracao).
+      if (!classSession || classSession.canceledAt) {
+        return { ok: false as const, error: 'class_not_found' as const };
+      }
 
       // Procura agendamento ativo do aluno em outra aula com horario sobreposto.
       const overlapping = await tx.classBooking.findFirst({

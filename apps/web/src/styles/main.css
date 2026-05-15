@@ -1061,3 +1061,13 @@ tr.row-selected {
     grid-template-columns: 1fr;
   }
 }
+
+/* Variante de aviso para acoes destrutivas (cancelar aula, etc). */
+.danger-button {
+  border-color: rgba(255, 59, 48, 0.4);
+  color: var(--error);
+}
+.danger-button:hover {
+  background: rgba(255, 59, 48, 0.08);
+  border-color: var(--error);
+}
