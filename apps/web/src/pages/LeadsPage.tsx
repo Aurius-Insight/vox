@@ -1,4 +1,13 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
 import { ApiClientError, api } from '../api/client';
 import {
   LEAD_STAGES,
@@ -40,6 +49,10 @@ const EMPTY_FORM: LeadForm = {
 
 const EMPTY_CONVERT: ConvertForm = { cpf: '', unitId: '', packageId: '' };
 
+// Etapas terminais nao aceitam mais conversao (matriculado ja foi; perdido
+// virou nao-oportunidade). Para o resto, o card mostra o botao Converter.
+const TERMINAL_STAGES: ReadonlySet<LeadStage> = new Set(['matriculado', 'perdido']);
+
 export function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
@@ -53,10 +66,15 @@ export function LeadsPage() {
   const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT);
   const [convertSaving, setConvertSaving] = useState(false);
 
+  // Click "sem mover" nao deve disparar drag — protege o botao "Converter".
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+
   const load = useCallback(async () => {
     try {
       const [leadList, packageList, unitList] = await Promise.all([
-        api<{ data: Lead[] }>('/api/leads?pageSize=50'),
+        api<{ data: Lead[] }>('/api/leads?pageSize=200'),
         api<{ data: Package[] }>('/api/packages'),
         api<{ data: Unit[] }>('/api/units'),
       ]);
@@ -71,6 +89,20 @@ export function LeadsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Agrupa por etapa preservando a ordem definida em LEAD_STAGES.
+  const leadsByStage = useMemo(() => {
+    const grouped: Record<LeadStage, Lead[]> = {
+      novo_lead: [],
+      em_atendimento: [],
+      pre_agendamento: [],
+      experimental_agendada: [],
+      matriculado: [],
+      perdido: [],
+    };
+    for (const lead of leads) grouped[lead.stage].push(lead);
+    return grouped;
+  }, [leads]);
 
   function updateField(field: keyof LeadForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -105,15 +137,38 @@ export function LeadsPage() {
     }
   }
 
-  async function handleStageChange(leadId: string, stage: LeadStage) {
+  /**
+   * Drag-and-drop: ao soltar o card numa coluna diferente, faz update
+   * otimista (move ja na UI) e dispara o PATCH. Em caso de erro, reverte.
+   */
+  async function handleDragEnd(event: DragEndEvent) {
     setError('');
+    const { active, over } = event;
+    if (!over) return;
+    const leadId = String(active.id);
+    const newStage = over.id as LeadStage;
+    const lead = leads.find((item) => item.id === leadId);
+    if (!lead || lead.stage === newStage) return;
+
+    const previousStage = lead.stage;
+    setLeads((current) =>
+      current.map((item) => (item.id === leadId ? { ...item, stage: newStage } : item)),
+    );
+
     try {
       const response = await api<{ data: Lead }>(`/api/leads/${leadId}/stage`, {
         method: 'PATCH',
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify({ stage: newStage }),
       });
-      setLeads((current) => current.map((lead) => (lead.id === leadId ? response.data : lead)));
+      setLeads((current) =>
+        current.map((item) => (item.id === leadId ? response.data : item)),
+      );
     } catch (err) {
+      setLeads((current) =>
+        current.map((item) =>
+          item.id === leadId ? { ...item, stage: previousStage } : item,
+        ),
+      );
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel mover o lead.');
     }
   }
@@ -278,62 +333,94 @@ export function LeadsPage() {
         </form>
       </section>
 
-      <section className="table-card">
-        <table>
-          <thead>
-            <tr>
-              <th>Lead</th>
-              <th>WhatsApp</th>
-              <th>Unidade</th>
-              <th>Origem</th>
-              <th>Etapa</th>
-              <th>Acao</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leads.length === 0 && (
-              <tr>
-                <td colSpan={6}>Nenhum lead cadastrado.</td>
-              </tr>
-            )}
-            {leads.map((lead) => (
-              <tr key={lead.id}>
-                <td>{lead.name}</td>
-                <td>{lead.whatsapp}</td>
-                <td>{lead.unitInterest}</td>
-                <td>{lead.campaign ?? lead.source}</td>
-                <td>
-                  <select
-                    value={lead.stage}
-                    onChange={(event) =>
-                      void handleStageChange(lead.id, event.target.value as LeadStage)
-                    }
-                  >
-                    {LEAD_STAGES.map((stage) => (
-                      <option key={stage} value={stage}>
-                        {LEAD_STAGE_LABELS[stage]}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  {lead.stage === 'matriculado' ? (
-                    <span className="status-chip">Matriculado</span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => startConvert(lead)}
-                    >
-                      Converter
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <section className="kanban-board" aria-label="Pipeline de leads">
+          {LEAD_STAGES.map((stage) => (
+            <KanbanColumn
+              key={stage}
+              stage={stage}
+              leads={leadsByStage[stage]}
+              onConvertLead={startConvert}
+            />
+          ))}
+        </section>
+      </DndContext>
     </main>
+  );
+}
+
+function KanbanColumn({
+  stage,
+  leads,
+  onConvertLead,
+}: {
+  stage: LeadStage;
+  leads: Lead[];
+  onConvertLead: (lead: Lead) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage });
+
+  return (
+    <section
+      ref={setNodeRef}
+      className="kanban-column"
+      data-over={isOver || undefined}
+      aria-label={LEAD_STAGE_LABELS[stage]}
+    >
+      <header className="kanban-column-header">
+        <span className="kanban-column-title">{LEAD_STAGE_LABELS[stage]}</span>
+        <span className="kanban-column-count">{leads.length}</span>
+      </header>
+      <div className="kanban-column-body">
+        {leads.length === 0 ? (
+          <p className="kanban-empty">—</p>
+        ) : (
+          leads.map((lead) => (
+            <LeadCard key={lead.id} lead={lead} onConvert={() => onConvertLead(lead)} />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LeadCard({ lead, onConvert }: { lead: Lead; onConvert: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
+    id: lead.id,
+  });
+
+  // Aplica deslocamento durante o drag; transitions sao desligadas para evitar
+  // jitter visual no momento do "snap" entre colunas.
+  const style: React.CSSProperties | undefined = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
+    : undefined;
+
+  return (
+    <article
+      ref={setNodeRef}
+      className="kanban-card"
+      data-dragging={isDragging || undefined}
+      style={style}
+      {...listeners}
+      {...attributes}
+    >
+      <p className="kanban-card-name">{lead.name}</p>
+      <p className="kanban-card-meta">{lead.whatsapp}</p>
+      <p className="kanban-card-meta">
+        {lead.unitInterest} · {lead.campaign ?? lead.source}
+      </p>
+      {TERMINAL_STAGES.has(lead.stage) ? (
+        <span className="status-chip">{LEAD_STAGE_LABELS[lead.stage]}</span>
+      ) : (
+        <button
+          type="button"
+          className="secondary-button kanban-card-action"
+          onClick={onConvert}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          Converter
+        </button>
+      )}
+    </article>
   );
 }
