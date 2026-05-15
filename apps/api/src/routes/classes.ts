@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler, maskPhone } from '../lib/http.js';
+import { resolveAttendanceCredit } from '../domain/attendance.js';
 import { isProfessorScoped, resolveUnitScope } from '../domain/access.js';
 
 const router = Router();
@@ -224,11 +225,24 @@ router.post(
         },
       });
 
-      // Decisao do MVP: o credito ja foi descontado no agendamento. A marcacao
-      // de presenca NAO mexe em saldo (presente nao desconta, no-show nao
-      // estorna). `creditConsumed` permanece apenas como flag informacional
-      // ("essa aula era cobravel e o aluno compareceu").
-      const creditConsumed = booking.consumesCredit && input.status === 'presente';
+      // Regra da Transcricao: o credito conta APENAS quando o professor marca
+      // presente; no-show nao consome; correcao presente -> no-show estorna.
+      const resolution = resolveAttendanceCredit({
+        status: input.status,
+        consumesCredit: booking.consumesCredit,
+        alreadyConsumed: existing?.creditConsumed ?? false,
+        creditBalance: booking.student.creditBalance,
+      });
+
+      if (!resolution.ok) return { error: resolution.reason };
+
+      const student =
+        resolution.creditDelta === 0
+          ? booking.student
+          : await tx.student.update({
+              where: { id: booking.student.id },
+              data: { creditBalance: { increment: resolution.creditDelta } },
+            });
 
       const attendance = await tx.attendance.upsert({
         where: {
@@ -239,7 +253,7 @@ router.post(
         },
         update: {
           status: input.status,
-          creditConsumed,
+          creditConsumed: resolution.willConsume,
           markedByUserId: req.user!.id,
           markedAt: new Date(),
         },
@@ -247,7 +261,7 @@ router.post(
           classSessionId: req.params.classId,
           studentId: input.studentId,
           status: input.status,
-          creditConsumed,
+          creditConsumed: resolution.willConsume,
           markedByUserId: req.user!.id,
         },
       });
@@ -264,10 +278,13 @@ router.post(
         },
       });
 
-      return { attendance, student: booking.student };
+      return { attendance, student };
     });
 
     if ('error' in result) {
+      if (result.error === 'insufficient_credit') {
+        throw new ApiError(409, 'insufficient_credit', 'Aluno sem saldo para consumir credito.');
+      }
       if (result.error === 'class_not_found') {
         throw new ApiError(404, 'class_not_found', 'Aula nao encontrada.');
       }

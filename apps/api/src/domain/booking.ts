@@ -42,14 +42,13 @@ export function canBookClass(input: {
 }
 
 /**
- * Regra de cancelamento de agendamento.
+ * Regra de cancelamento de agendamento pelo aluno regular.
  *
  * - So e possivel cancelar um agendamento ativo.
  * - Nao e possivel cancelar uma aula que ja comecou.
  *
- * Nota: o portal do aluno hoje **nao** expoe cancelamento (decisao do MVP —
- * aula experimental nao cancela). Esta funcao fica reservada para um endpoint
- * administrativo futuro (operacao cancelando em nome do aluno).
+ * A "janela de cancelamento tardio" (ex.: bloquear X minutos antes) foi
+ * explicitamente adiada para fase futura na reuniao de validacao.
  */
 export function canCancelBooking(input: {
   hasActiveBooking: boolean;

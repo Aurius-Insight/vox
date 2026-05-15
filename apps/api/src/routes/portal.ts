@@ -14,7 +14,7 @@ import {
 import { portalLimiter } from '../middleware/rateLimit.js';
 import { ApiError, asyncHandler } from '../lib/http.js';
 import { hashCpf } from '../lib/cpf.js';
-import { canBookClass } from '../domain/booking.js';
+import { canBookClass, canCancelBooking } from '../domain/booking.js';
 import { sendMessageByPhone } from '../lib/botconversa.js';
 import { logger, serializeError } from '../lib/logger.js';
 
@@ -267,6 +267,7 @@ const bookingErrorMap: Record<string, { status: number; code: string; message: s
     code: 'time_conflict',
     message: 'Voce ja tem uma aula agendada nesse horario.',
   },
+  not_booked: { status: 409, code: 'not_booked', message: 'Voce nao tem agendamento nesta aula.' },
   class_not_found: { status: 404, code: 'class_not_found', message: 'Aula nao encontrada.' },
   student_not_found: { status: 404, code: 'student_not_found', message: 'Aluno nao encontrado.' },
 };
@@ -324,36 +325,26 @@ router.post(
       });
       if (!check.ok) return { ok: false as const, error: check.reason };
 
-      // Sem cancelamento no portal, o agendamento sempre nasce novo: `create`
-      // direto e mais explicito do que upsert. P2002 = ja existe (raca);
-      // Serializable + retry resolve no segundo round.
-      let booking;
-      try {
-        booking = await tx.classBooking.create({
-          data: {
-            classSessionId: classId,
-            studentId,
-            type: 'regular',
-            status: 'agendado',
-            consumesCredit: true,
-          },
-        });
-      } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
-          return { ok: false as const, error: 'already_booked' as const };
-        }
-        throw error;
-      }
-
-      // Decisao B do MVP: o credito sai do saldo no agendamento. Sem volta —
-      // no-show nao estorna, e o portal nao expoe cancelamento.
-      // canBookClass ja garantiu creditBalance > 0 antes deste write.
-      await tx.student.update({
-        where: { id: studentId },
-        data: { creditBalance: { decrement: 1 } },
+      // Upsert para reativar um agendamento previamente cancelado mantendo
+      // a chave (classSessionId, studentId). Credito nao e tocado aqui — so
+      // na presenca confirmada pelo professor (decisao da Transcricao).
+      const booking = await tx.classBooking.upsert({
+        where: {
+          classSessionId_studentId: { classSessionId: classId, studentId },
+        },
+        update: {
+          status: 'agendado',
+          type: 'regular',
+          consumesCredit: true,
+          canceledAt: null,
+        },
+        create: {
+          classSessionId: classId,
+          studentId,
+          type: 'regular',
+          status: 'agendado',
+          consumesCredit: true,
+        },
       });
 
       await tx.auditLog.create({
@@ -377,9 +368,57 @@ router.post(
   }),
 );
 
-// Cancelamento de agendamento pelo aluno foi desabilitado: aula experimental
-// nao cancela e a regra de cancelamento de aula regular ainda esta em aberto.
-// A funcao `canCancelBooking` (em `domain/booking.ts`) fica preservada para um
-// futuro endpoint administrativo, mas nao ha rota exposta pelo portal.
+// Cancelamento pelo aluno regular: a Transcricao prevê expressamente que o
+// aluno "vai lá mesmo no sistema e desmarca" (1:09). Sem janela de
+// "cancelamento tardio" — esta foi explicitamente adiada para fase futura.
+router.delete(
+  '/classes/:classId/book',
+  requirePortalStudent,
+  asyncHandler(async (req, res) => {
+    const studentId = req.student!.id;
+    const { classId } = req.params;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const classSession = await tx.classSession.findUnique({ where: { id: classId } });
+      if (!classSession) return { ok: false as const, error: 'class_not_found' as const };
+
+      const booking = await tx.classBooking.findUnique({
+        where: {
+          classSessionId_studentId: { classSessionId: classId, studentId },
+        },
+      });
+
+      const check = canCancelBooking({
+        hasActiveBooking: booking?.status === 'agendado',
+        startsAt: classSession.startsAt,
+      });
+      if (!check.ok) return { ok: false as const, error: check.reason };
+
+      const updated = await tx.classBooking.update({
+        where: { id: booking!.id },
+        data: { status: 'cancelado', canceledAt: new Date() },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorType: 'student',
+          entityType: 'class_booking',
+          entityId: updated.id,
+          action: 'booking.canceled',
+          before: booking!,
+          after: updated,
+        },
+      });
+
+      return { ok: true as const, booking: updated };
+    });
+
+    if (!result.ok) throwBookingError(result.error);
+
+    res.json({
+      data: { id: result.booking.id, status: result.booking.status },
+    });
+  }),
+);
 
 export default router;

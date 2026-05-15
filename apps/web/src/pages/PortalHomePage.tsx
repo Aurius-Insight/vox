@@ -58,13 +58,13 @@ export function PortalHomePage() {
   }, [load]);
 
   async function handleBooking(item: PortalClass) {
-    // Decisao do MVP: nao tem cancelamento pelo portal — so reserva.
-    if (item.isBooked) return;
     setPendingId(item.id);
     setError('');
 
     try {
-      await api(`/api/portal/classes/${item.id}/book`, { method: 'POST' });
+      await api(`/api/portal/classes/${item.id}/book`, {
+        method: item.isBooked ? 'DELETE' : 'POST',
+      });
       await load();
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -157,7 +157,7 @@ export function PortalHomePage() {
           {classes.length === 0 && <p className="empty-state">Nenhuma aula disponivel no momento.</p>}
           {classes.map((item) => {
             const isPending = pendingId === item.id;
-            const buttonDisabled = isPending || !item.canBook;
+            const actionDisabled = isPending || (!item.isBooked && !item.canBook);
 
             return (
               <article key={item.id} className="class-card">
@@ -173,18 +173,20 @@ export function PortalHomePage() {
                     {item.bookedCount}/{item.capacity} vagas
                   </span>
                 </div>
-                {item.isBooked ? (
-                  // Aluno ja agendou: a aula nao pode mais ser cancelada pelo portal.
-                  <span className="class-confirmed">Reservada</span>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={buttonDisabled}
-                    onClick={() => void handleBooking(item)}
-                  >
-                    {isPending ? 'Processando...' : item.canBook ? 'Usar 1 aula' : 'Indisponivel'}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={item.isBooked ? 'secondary-button' : undefined}
+                  disabled={actionDisabled}
+                  onClick={() => void handleBooking(item)}
+                >
+                  {isPending
+                    ? 'Processando...'
+                    : item.isBooked
+                      ? 'Cancelar'
+                      : item.canBook
+                        ? 'Usar 1 aula'
+                        : 'Indisponivel'}
+                </button>
               </article>
             );
           })}
