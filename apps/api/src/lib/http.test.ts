@@ -42,8 +42,8 @@ describe('parsePagination', () => {
     });
   });
 
-  it('limita o pageSize em 100', () => {
-    expect(parsePagination({ pageSize: '999' })).toEqual({ page: 1, pageSize: 100, offset: 0 });
+  it('limita o pageSize em 500 (teto pensado para vistas amplas tipo Kanban)', () => {
+    expect(parsePagination({ pageSize: '999' })).toEqual({ page: 1, pageSize: 500, offset: 0 });
   });
 
   it('nao aceita pagina menor que 1', () => {

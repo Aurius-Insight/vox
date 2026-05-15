@@ -1002,3 +1002,62 @@ tr.row-selected {
   content: "✓";
   color: var(--accent);
 }
+
+/* Barra de filtros acima do Kanban — busca + select de unidade. */
+.filters-bar {
+  align-items: end;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr 220px auto;
+  padding: 1rem 1.2rem;
+}
+
+.filters-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.filters-bar input,
+.filters-bar select {
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--text);
+}
+
+.filters-count {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: 0.85rem;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.filters-clear {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.7rem;
+}
+
+.filters-clear:hover {
+  background: var(--accent-soft);
+}
+
+@media (max-width: 760px) {
+  .filters-bar {
+    grid-template-columns: 1fr;
+  }
+}

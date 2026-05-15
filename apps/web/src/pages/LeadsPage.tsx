@@ -53,6 +53,8 @@ const EMPTY_CONVERT: ConvertForm = { cpf: '', unitId: '', packageId: '' };
 // virou nao-oportunidade). Para o resto, o card mostra o botao Converter.
 const TERMINAL_STAGES: ReadonlySet<LeadStage> = new Set(['matriculado', 'perdido']);
 
+const NAO_INFORMADO = 'Nao informado';
+
 export function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
@@ -66,15 +68,29 @@ export function LeadsPage() {
   const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT);
   const [convertSaving, setConvertSaving] = useState(false);
 
+  // Filtros do Kanban — controlam o que vai pra API.
+  const [unitFilter, setUnitFilter] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+
   // Click "sem mover" nao deve disparar drag — protege o botao "Converter".
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
+  // Debounce simples na busca: 300ms apos o ultimo keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   const load = useCallback(async () => {
     try {
+      const params = new URLSearchParams({ pageSize: '500' });
+      if (unitFilter) params.set('unit', unitFilter);
+      if (search) params.set('search', search);
       const [leadList, packageList, unitList] = await Promise.all([
-        api<{ data: Lead[] }>('/api/leads?pageSize=200'),
+        api<{ data: Lead[] }>(`/api/leads?${params}`),
         api<{ data: Package[] }>('/api/packages'),
         api<{ data: Unit[] }>('/api/units'),
       ]);
@@ -84,7 +100,7 @@ export function LeadsPage() {
     } catch {
       setError('Nao foi possivel carregar os leads.');
     }
-  }, []);
+  }, [unitFilter, search]);
 
   useEffect(() => {
     void load();
@@ -331,6 +347,45 @@ export function LeadsPage() {
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="filters-bar">
+        <label className="filter-search">
+          <span>Buscar</span>
+          <input
+            type="search"
+            placeholder="Nome, telefone, campanha…"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+          />
+        </label>
+        <label className="filter-unit">
+          <span>Unidade</span>
+          <select value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}>
+            <option value="">Todas</option>
+            {units.map((unit) => (
+              <option key={unit.id} value={unit.name}>
+                {unit.name}
+              </option>
+            ))}
+            <option value={NAO_INFORMADO}>Não informado</option>
+          </select>
+        </label>
+        <span className="filters-count">
+          {leads.length} {leads.length === 1 ? 'lead' : 'leads'}
+          {(unitFilter || search) && (
+            <button
+              type="button"
+              className="filters-clear"
+              onClick={() => {
+                setUnitFilter('');
+                setSearchInput('');
+              }}
+            >
+              limpar
+            </button>
+          )}
+        </span>
       </section>
 
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>

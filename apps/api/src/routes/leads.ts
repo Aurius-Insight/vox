@@ -23,6 +23,8 @@ const stages: LeadStage[] = [
 const ListQuerySchema = z.object({
   stage: z.enum(stages as [LeadStage, ...LeadStage[]]).optional(),
   search: z.string().max(80).optional(),
+  // Match exato em Lead.unitInterest (que e texto livre). Usado pelo Kanban.
+  unit: z.string().max(80).optional(),
   page: z.string().optional(),
   pageSize: z.string().optional(),
 });
@@ -85,10 +87,12 @@ router.get(
 
     const where: Prisma.LeadWhereInput = {
       ...(query.stage ? { stage: query.stage } : {}),
+      ...(query.unit ? { unitInterest: query.unit } : {}),
       ...(query.search
         ? {
             OR: [
               { name: { contains: query.search, mode: 'insensitive' } },
+              { whatsapp: { contains: query.search.replace(/\D/g, '') } },
               { unitInterest: { contains: query.search, mode: 'insensitive' } },
               { campaign: { contains: query.search, mode: 'insensitive' } },
             ],

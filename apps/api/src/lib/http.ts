@@ -21,7 +21,9 @@ export function asyncHandler(
 
 export function parsePagination(query: Request['query']) {
   const page = Math.max(Number(query.page ?? 1), 1);
-  const pageSize = Math.min(Math.max(Number(query.pageSize ?? 25), 1), 100);
+  // Teto de 500: Kanban de leads precisa carregar vista ampla apos filtrar
+  // por unidade/busca; rotas de listagem comum continuam usando os defaults.
+  const pageSize = Math.min(Math.max(Number(query.pageSize ?? 25), 1), 500);
   return {
     page,
     pageSize,
