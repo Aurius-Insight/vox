@@ -1,0 +1,20 @@
+{
+  "name": "Vox RJ - Sistema Interno",
+  "short_name": "Vox RJ",
+  "description": "Gestao operacional e comercial da Vox RJ: leads, agenda, presenca e portal do aluno.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f5f7",
+  "theme_color": "#1d1d1f",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ]
+}

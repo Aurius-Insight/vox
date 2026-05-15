@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  diretor
+  coordenacao
+  professor
+}
+
+enum LeadStage {
+  novo_lead
+  em_atendimento
+  pre_agendamento
+  experimental_agendada
+  matriculado
+  perdido
+}
+
+enum AttendanceStatus {
+  presente
+  no_show
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teachers      User[]
+  classSessions ClassSession[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  roles        Role[]
+  active       Boolean  @default(true)
+  subjectId    String?
+  unitId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subject            Subject?       @relation(fields: [subjectId], references: [id])
+  unit               Unit?          @relation(fields: [unitId], references: [id])
+  taughtClasses      ClassSession[] @relation("TeacherClasses")
+  markedAttendances  Attendance[]   @relation("MarkedAttendances")
+
+  @@index([subjectId])
+  @@index([unitId])
+}
+
+model Lead {
+  id                    String    @id @default(cuid())
+  name                  String
+  whatsapp              String
+  email                 String?
+  unitInterest          String
+  campaign              String?
+  source                String
+  stage                 LeadStage @default(novo_lead)
+  responsibleUserId     String?
+  botconversaContactId  String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  bookings              ClassBooking[]
+  student               Student?
+
+  @@index([whatsapp])
+  @@index([stage])
+  @@index([campaign])
+}
+
+model Student {
+  id             String   @id @default(cuid())
+  contactId      String?
+  leadId         String?  @unique
+  unitId         String?
+  name           String
+  whatsapp       String
+  email          String?
+  cpfHash        String?
+  cpfMasked      String?
+  enrollmentCode String   @unique
+  packageName    String
+  creditBalance  Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lead           Lead?          @relation(fields: [leadId], references: [id])
+  unit           Unit?          @relation(fields: [unitId], references: [id])
+  bookings       ClassBooking[]
+  attendances    Attendance[]
+
+  @@index([whatsapp])
+  @@index([cpfHash])
+  @@index([unitId])
+}
+
+model ClassSession {
+  id            String   @id @default(cuid())
+  subjectId     String?
+  unitId        String?
+  isGuest       Boolean  @default(false)
+  room          String
+  teacherUserId String?
+  startsAt      DateTime
+  endsAt        DateTime
+  capacity      Int
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subject       Subject?       @relation(fields: [subjectId], references: [id])
+  unit          Unit?          @relation(fields: [unitId], references: [id])
+  teacher       User?          @relation("TeacherClasses", fields: [teacherUserId], references: [id])
+  bookings      ClassBooking[]
+  attendances   Attendance[]
+
+  @@index([unitId])
+  @@index([startsAt])
+  @@index([teacherUserId])
+  @@index([subjectId])
+}
+
+enum BookingType {
+  regular
+  experimental
+}
+
+enum BookingStatus {
+  agendado
+  cancelado
+}
+
+model ClassBooking {
+  id             String        @id @default(cuid())
+  classSessionId String
+  studentId      String?
+  leadId         String?
+  type           BookingType
+  status         BookingStatus @default(agendado)
+  consumesCredit Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  canceledAt     DateTime?
+
+  classSession   ClassSession  @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student        Student?      @relation(fields: [studentId], references: [id])
+  lead           Lead?         @relation(fields: [leadId], references: [id])
+
+  @@unique([classSessionId, studentId])
+  @@unique([classSessionId, leadId])
+  @@index([classSessionId])
+  @@index([studentId])
+  @@index([leadId])
+}
+
+model Attendance {
+  id             String           @id @default(cuid())
+  classSessionId String
+  studentId      String
+  status         AttendanceStatus
+  creditConsumed Boolean          @default(false)
+  markedByUserId String
+  markedAt       DateTime         @default(now())
+
+  classSession    ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  student         Student          @relation(fields: [studentId], references: [id])
+  markedBy        User             @relation("MarkedAttendances", fields: [markedByUserId], references: [id])
+
+  @@unique([classSessionId, studentId])
+  @@index([classSessionId])
+  @@index([studentId])
+  @@index([markedByUserId])
+}
+
+model IntegrationEvent {
+  id              String   @id @default(cuid())
+  source          String
+  externalEventId String   @unique
+  payload         Json
+  processedAt     DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actorType   String
+  entityType  String
+  entityId    String
+  action      String
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorUserId])
+}
+
+model Unit {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  rooms     Int      @default(1)
+  capacity  Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students      Student[]
+  classSessions ClassSession[]
+  scopedUsers   User[]
+}
+
+model Package {
+  id            String   @id @default(cuid())
+  name          String
+  classCount    Int
+  priceCents    Int
+  validityDays  Int      @default(0)
+  active        Boolean  @default(true)
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

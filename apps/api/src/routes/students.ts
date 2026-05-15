@@ -1,0 +1,231 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { prisma } from '../db/client.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
+import { ApiError, asyncHandler, maskCpf, maskPhone } from '../lib/http.js';
+import { hashCpf, normalizeCpf } from '../lib/cpf.js';
+import { uniqueEnrollmentCode } from '../domain/enrollment.js';
+import { resolveUnitScope } from '../domain/access.js';
+
+const router = Router();
+
+const VIEW_ROLES = ['diretor', 'coordenacao'] as const;
+
+const CreateStudentSchema = z.object({
+  name: z.string().min(2).max(120),
+  whatsapp: z.string().min(8).max(30),
+  email: z.string().email().max(160).optional(),
+  cpf: z.string().min(11).max(14),
+  unitId: z.string().min(1),
+  packageId: z.string().min(1),
+});
+
+router.get(
+  '/',
+  requireAuth,
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const students = await prisma.student.findMany({
+      where: { active: true, ...(unitScope ? { unitId: unitScope } : {}) },
+      orderBy: { name: 'asc' },
+      include: { unit: { select: { name: true } } },
+    });
+
+    res.json({
+      data: students.map((student) => ({
+        id: student.id,
+        name: student.name,
+        enrollmentCode: student.enrollmentCode,
+        whatsapp: maskPhone(student.whatsapp),
+        cpf: student.cpfMasked ?? undefined,
+        unitId: student.unitId,
+        unitName: student.unit?.name ?? null,
+        packageName: student.packageName,
+        creditBalance: student.creditBalance,
+        status: student.active ? 'ativo' : 'inativo',
+      })),
+    });
+  }),
+);
+
+// Cadastro manual de aluno (sem passar por lead). O fluxo principal continua
+// sendo a conversao lead -> aluno; isso atende casos avulsos / legado.
+router.post(
+  '/',
+  requireAuth,
+  requireRole('diretor'),
+  asyncHandler(async (req, res) => {
+    const input = CreateStudentSchema.parse(req.body);
+    const cpfDigits = normalizeCpf(input.cpf);
+    if (cpfDigits.length !== 11) {
+      throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
+    }
+
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+    if (unitScope && unitScope !== input.unitId) {
+      throw new ApiError(403, 'unit_scope', 'Voce so pode cadastrar alunos na sua unidade.');
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
+      if (!unit) return { ok: false as const, error: 'unit_not_found' as const };
+
+      const pkg = await tx.package.findFirst({ where: { id: input.packageId, active: true } });
+      if (!pkg) return { ok: false as const, error: 'package_not_found' as const };
+
+      const cpfHashValue = hashCpf(cpfDigits);
+      const existing = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
+      if (existing) return { ok: false as const, error: 'cpf_already_used' as const };
+
+      const enrollmentCode = await uniqueEnrollmentCode((code) =>
+        tx.student.findUnique({ where: { enrollmentCode: code } }).then((found) => found !== null),
+      );
+
+      const student = await tx.student.create({
+        data: {
+          name: input.name,
+          whatsapp: input.whatsapp.replace(/\D/g, ''),
+          email: input.email,
+          cpfHash: cpfHashValue,
+          cpfMasked: maskCpf(cpfDigits),
+          enrollmentCode,
+          unitId: input.unitId,
+          packageName: pkg.name,
+          creditBalance: pkg.classCount,
+          active: true,
+        },
+        include: { unit: { select: { name: true } } },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'student',
+          entityId: student.id,
+          action: 'student.created',
+          after: { enrollmentCode, packageName: pkg.name, unitId: input.unitId },
+        },
+      });
+
+      return { ok: true as const, student };
+    });
+
+    if (!result.ok) {
+      const map: Record<string, { status: number; message: string }> = {
+        unit_not_found: { status: 404, message: 'Unidade nao encontrada.' },
+        package_not_found: { status: 404, message: 'Pacote nao encontrado.' },
+        cpf_already_used: { status: 409, message: 'Ja existe um aluno com este CPF.' },
+      };
+      const mapped = map[result.error];
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    res.status(201).json({
+      data: {
+        id: result.student.id,
+        name: result.student.name,
+        enrollmentCode: result.student.enrollmentCode,
+        unitId: result.student.unitId,
+        unitName: result.student.unit?.name ?? null,
+        packageName: result.student.packageName,
+        creditBalance: result.student.creditBalance,
+      },
+    });
+  }),
+);
+
+router.get(
+  '/:studentId',
+  requireAuth,
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const student = await prisma.student.findUnique({
+      where: { id: req.params.studentId },
+      include: {
+        unit: { select: { id: true, name: true } },
+        lead: { select: { campaign: true, source: true, stage: true } },
+        bookings: {
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: {
+            classSession: {
+              select: {
+                startsAt: true,
+                isGuest: true,
+                subject: { select: { name: true } },
+                unit: { select: { name: true } },
+              },
+            },
+          },
+        },
+        attendances: {
+          orderBy: { markedAt: 'desc' },
+          take: 20,
+          include: {
+            classSession: {
+              select: {
+                startsAt: true,
+                isGuest: true,
+                subject: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!student) throw new ApiError(404, 'student_not_found', 'Aluno nao encontrado.');
+    if (unitScope && student.unitId !== unitScope) {
+      throw new ApiError(403, 'unit_scope', 'Aluno fora da sua unidade.');
+    }
+
+    const classLabel = (session: { isGuest: boolean; subject: { name: string } | null }) =>
+      session.isGuest ? 'Professor convidado' : (session.subject?.name ?? 'Sem materia');
+
+    res.json({
+      data: {
+        id: student.id,
+        name: student.name,
+        enrollmentCode: student.enrollmentCode,
+        whatsapp: maskPhone(student.whatsapp),
+        email: student.email ?? undefined,
+        cpf: student.cpfMasked ?? undefined,
+        unitId: student.unitId,
+        unitName: student.unit?.name ?? null,
+        packageName: student.packageName,
+        creditBalance: student.creditBalance,
+        status: student.active ? 'ativo' : 'inativo',
+        origin: student.lead
+          ? {
+              campaign: student.lead.campaign ?? undefined,
+              source: student.lead.source,
+              stage: student.lead.stage,
+            }
+          : undefined,
+        bookings: student.bookings.map((booking) => ({
+          id: booking.id,
+          status: booking.status,
+          type: booking.type,
+          classLabel: classLabel(booking.classSession),
+          unit: booking.classSession.unit?.name ?? null,
+          startsAt: booking.classSession.startsAt.toISOString(),
+        })),
+        attendances: student.attendances.map((attendance) => ({
+          id: attendance.id,
+          status: attendance.status,
+          creditConsumed: attendance.creditConsumed,
+          classLabel: classLabel(attendance.classSession),
+          startsAt: attendance.classSession.startsAt.toISOString(),
+          markedAt: attendance.markedAt.toISOString(),
+        })),
+      },
+    });
+  }),
+);
+
+export default router;

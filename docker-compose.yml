@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vox-mvp-postgres
+    environment:
+      POSTGRES_USER: vox
+      POSTGRES_PASSWORD: vox
+      POSTGRES_DB: vox_mvp
+    # Porta de host 5433 para nao conflitar com um PostgreSQL local em 5432.
+    ports:
+      - "5433:5432"
+    volumes:
+      - vox_mvp_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vox -d vox_mvp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: vox-mvp-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    # Porta de host 6380 para nao conflitar com um Redis local em 6379.
+    ports:
+      - "6380:6379"
+    volumes:
+      - vox_mvp_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  vox_mvp_postgres:
+  vox_mvp_redis:
