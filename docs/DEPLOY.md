@@ -52,6 +52,7 @@ variaveis no Render no item 2.
 | Chave | Valor |
 |---|---|
 | `NODE_ENV` | `production` |
+| `TZ` | `America/Sao_Paulo` (todo `new Date()` e log do servidor sai em BRT) |
 | `PORT` | `10000` (porta interna do Render) |
 | `APP_ORIGIN` | URL do Static Site (preencher apos 2.d) |
 | `DATABASE_URL` | Internal URL do Postgres (item 2.a) |

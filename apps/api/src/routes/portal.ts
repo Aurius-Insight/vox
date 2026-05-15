@@ -324,23 +324,36 @@ router.post(
       });
       if (!check.ok) return { ok: false as const, error: check.reason };
 
-      const booking = await tx.classBooking.upsert({
-        where: {
-          classSessionId_studentId: { classSessionId: classId, studentId },
-        },
-        update: {
-          status: 'agendado',
-          type: 'regular',
-          consumesCredit: true,
-          canceledAt: null,
-        },
-        create: {
-          classSessionId: classId,
-          studentId,
-          type: 'regular',
-          status: 'agendado',
-          consumesCredit: true,
-        },
+      // Sem cancelamento no portal, o agendamento sempre nasce novo: `create`
+      // direto e mais explicito do que upsert. P2002 = ja existe (raca);
+      // Serializable + retry resolve no segundo round.
+      let booking;
+      try {
+        booking = await tx.classBooking.create({
+          data: {
+            classSessionId: classId,
+            studentId,
+            type: 'regular',
+            status: 'agendado',
+            consumesCredit: true,
+          },
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          return { ok: false as const, error: 'already_booked' as const };
+        }
+        throw error;
+      }
+
+      // Decisao B do MVP: o credito sai do saldo no agendamento. Sem volta —
+      // no-show nao estorna, e o portal nao expoe cancelamento.
+      // canBookClass ja garantiu creditBalance > 0 antes deste write.
+      await tx.student.update({
+        where: { id: studentId },
+        data: { creditBalance: { decrement: 1 } },
       });
 
       await tx.auditLog.create({
