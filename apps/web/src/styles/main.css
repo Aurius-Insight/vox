@@ -986,3 +986,19 @@ tr.row-selected {
   align-self: flex-start;
   margin-top: 0.25rem;
 }
+
+/* Aluno ja reservou: indicador inerte no lugar do botao (sem cancelamento). */
+.class-confirmed {
+  align-items: center;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 600;
+  gap: 0.35rem;
+  justify-content: center;
+  padding: 0.45rem 1rem;
+}
+.class-confirmed::before {
+  content: "✓";
+  color: var(--accent);
+}

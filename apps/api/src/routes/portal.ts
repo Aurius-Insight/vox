@@ -14,7 +14,7 @@ import {
 import { portalLimiter } from '../middleware/rateLimit.js';
 import { ApiError, asyncHandler } from '../lib/http.js';
 import { hashCpf } from '../lib/cpf.js';
-import { canBookClass, canCancelBooking } from '../domain/booking.js';
+import { canBookClass } from '../domain/booking.js';
 import { sendMessageByPhone } from '../lib/botconversa.js';
 import { logger, serializeError } from '../lib/logger.js';
 
@@ -267,7 +267,6 @@ const bookingErrorMap: Record<string, { status: number; code: string; message: s
     code: 'time_conflict',
     message: 'Voce ja tem uma aula agendada nesse horario.',
   },
-  not_booked: { status: 409, code: 'not_booked', message: 'Voce nao tem agendamento nesta aula.' },
   class_not_found: { status: 404, code: 'class_not_found', message: 'Aula nao encontrada.' },
   student_not_found: { status: 404, code: 'student_not_found', message: 'Aluno nao encontrado.' },
 };
@@ -365,54 +364,9 @@ router.post(
   }),
 );
 
-router.delete(
-  '/classes/:classId/book',
-  requirePortalStudent,
-  asyncHandler(async (req, res) => {
-    const studentId = req.student!.id;
-    const { classId } = req.params;
-
-    const result = await prisma.$transaction(async (tx) => {
-      const classSession = await tx.classSession.findUnique({ where: { id: classId } });
-      if (!classSession) return { ok: false as const, error: 'class_not_found' as const };
-
-      const booking = await tx.classBooking.findUnique({
-        where: {
-          classSessionId_studentId: { classSessionId: classId, studentId },
-        },
-      });
-
-      const check = canCancelBooking({
-        hasActiveBooking: booking?.status === 'agendado',
-        startsAt: classSession.startsAt,
-      });
-      if (!check.ok) return { ok: false as const, error: check.reason };
-
-      const updated = await tx.classBooking.update({
-        where: { id: booking!.id },
-        data: { status: 'cancelado', canceledAt: new Date() },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          actorType: 'student',
-          entityType: 'class_booking',
-          entityId: updated.id,
-          action: 'booking.canceled',
-          before: booking!,
-          after: updated,
-        },
-      });
-
-      return { ok: true as const, booking: updated };
-    });
-
-    if (!result.ok) throwBookingError(result.error);
-
-    res.json({
-      data: { id: result.booking.id, status: result.booking.status },
-    });
-  }),
-);
+// Cancelamento de agendamento pelo aluno foi desabilitado: aula experimental
+// nao cancela e a regra de cancelamento de aula regular ainda esta em aberto.
+// A funcao `canCancelBooking` (em `domain/booking.ts`) fica preservada para um
+// futuro endpoint administrativo, mas nao ha rota exposta pelo portal.
 
 export default router;
