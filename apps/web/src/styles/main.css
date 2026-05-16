@@ -1071,3 +1071,71 @@ tr.row-selected {
   background: rgba(255, 59, 48, 0.08);
   border-color: var(--error);
 }
+
+/* ---------------------------------------------------------------------------
+   Passe responsivo focado em smartphone (~ate 640px) — Portal e Presença
+   sao os fluxos onde o aluno/professor usam o celular de verdade. Tablets
+   (820px) ja sao cobertos pela media query principal acima.
+   --------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .app-page {
+    padding: 1rem 0.85rem;
+    gap: 1.2rem;
+  }
+
+  /* Tabelas (Presença, Alunos, Agenda) ganham scroll horizontal em vez de
+     quebrar o layout em colunas comprimidas demais. */
+  .table-card {
+    overflow-x: auto;
+  }
+  .table-card table {
+    min-width: 520px;
+  }
+
+  /* Cabeçalho de tabela (titulo + acao) empilha */
+  .table-card-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Botoes em linha podem virar coluna se nao couberem */
+  .row-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Touch targets minimos (recomendacao WCAG/iOS = 44px) pros botoes
+     que o usuario provavelmente vai tocar com o polegar. */
+  .row-actions button,
+  .grid-form-actions button,
+  .class-card button,
+  .filters-bar button {
+    min-height: 44px;
+    padding-block: 0.65rem;
+  }
+
+  /* Saldo do aluno: 3.6rem fica gigante em tela pequena, reduz pra caber bem. */
+  .credit-panel-value strong {
+    font-size: 2.6rem;
+  }
+  .portal-hero h1 {
+    font-size: clamp(1.6rem, 7vw, 2.2rem);
+  }
+  .portal-hero,
+  .credit-panel {
+    padding: 1.2rem;
+  }
+
+  /* Kanban: 1 coluna por vez com snap horizontal — gesto familiar de swipe. */
+  .kanban-board {
+    grid-auto-columns: 85vw;
+  }
+
+  /* Filtros do Kanban: 1 coluna (reforca o breakpoint 760 ja existente). */
+  .filters-bar {
+    grid-template-columns: 1fr;
+  }
+  .filters-count {
+    justify-content: space-between;
+  }
+}
