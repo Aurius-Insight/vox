@@ -25,12 +25,18 @@ const EMPTY_FORM: StudentForm = {
 export function AlunosPage() {
   const auth = useAuth();
   const canCreate = (auth.user?.roles ?? []).some((role) => role === 'diretor');
+  // Renovacao opera vendas: diretor + coordenacao podem (igual ao convert).
+  const canRenew = (auth.user?.roles ?? []).some(
+    (role) => role === 'diretor' || role === 'coordenacao',
+  );
 
   const [students, setStudents] = useState<StudentSummary[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [selected, setSelected] = useState<StudentDetail>();
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
+  const [renewPackageId, setRenewPackageId] = useState('');
+  const [renewSaving, setRenewSaving] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [saving, setSaving] = useState(false);
@@ -38,20 +44,20 @@ export function AlunosPage() {
 
   const load = useCallback(async () => {
     try {
-      const response = await api<{ data: StudentSummary[] }>('/api/students');
-      setStudents(response.data);
-      if (canCreate) {
-        const [packageList, unitList] = await Promise.all([
-          api<{ data: Package[] }>('/api/packages'),
-          api<{ data: Unit[] }>('/api/units'),
-        ]);
-        setPackages(packageList.data.filter((item) => item.active));
-        setUnits(unitList.data.filter((item) => item.active));
-      }
+      // Pacotes e unidades sao usados tanto pelo cadastro (so diretor)
+      // quanto pela renovacao (diretor + coordenacao) — entao carrega sempre.
+      const [studentList, packageList, unitList] = await Promise.all([
+        api<{ data: StudentSummary[] }>('/api/students'),
+        api<{ data: Package[] }>('/api/packages'),
+        api<{ data: Unit[] }>('/api/units'),
+      ]);
+      setStudents(studentList.data);
+      setPackages(packageList.data.filter((item) => item.active));
+      setUnits(unitList.data.filter((item) => item.active));
     } catch {
       setError('Nao foi possivel carregar os alunos.');
     }
-  }, [canCreate]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -67,10 +73,38 @@ export function AlunosPage() {
     try {
       const response = await api<{ data: StudentDetail }>(`/api/students/${id}`);
       setSelected(response.data);
+      setRenewPackageId('');
     } catch {
       setError('Nao foi possivel abrir o aluno.');
     } finally {
       setLoadingDetail(false);
+    }
+  }
+
+  async function handleRenew(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || !renewPackageId) return;
+    setError('');
+    setInfo('');
+    setRenewSaving(true);
+
+    try {
+      const response = await api<{
+        data: { packageName: string; creditBalance: number; name: string };
+      }>(`/api/students/${selected.id}/renew`, {
+        method: 'POST',
+        body: JSON.stringify({ packageId: renewPackageId }),
+      });
+      setInfo(
+        `${response.data.name}: renovado com ${response.data.packageName}. Saldo agora ${response.data.creditBalance} aulas.`,
+      );
+      setRenewPackageId('');
+      await openStudent(selected.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel renovar o pacote.');
+    } finally {
+      setRenewSaving(false);
     }
   }
 
@@ -254,6 +288,39 @@ export function AlunosPage() {
                   </p>
                 )}
               </div>
+
+              {canRenew && (
+                <div>
+                  <h3>Renovar pacote</h3>
+                  <p className="muted-text">
+                    Vende um novo pacote pro aluno; soma {' '}
+                    <em>aulas do pacote</em> ao saldo atual e atualiza o pacote ativo.
+                    Pagamento e auditoria externos.
+                  </p>
+                  <form className="grid-form" onSubmit={handleRenew}>
+                    <label>
+                      Pacote
+                      <select
+                        value={renewPackageId}
+                        onChange={(event) => setRenewPackageId(event.target.value)}
+                        required
+                      >
+                        <option value="">Selecione</option>
+                        {packages.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} (+{item.classCount} aulas)
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="grid-form-actions">
+                      <button type="submit" disabled={renewSaving || !renewPackageId}>
+                        {renewSaving ? 'Renovando...' : 'Confirmar renovacao'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
               <div>
                 <h3>Agendamentos</h3>

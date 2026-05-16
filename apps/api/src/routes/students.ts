@@ -20,6 +20,10 @@ const CreateStudentSchema = z.object({
   packageId: z.string().min(1),
 });
 
+const RenewSchema = z.object({
+  packageId: z.string().min(1),
+});
+
 router.get(
   '/',
   requireAuth,
@@ -223,6 +227,89 @@ router.get(
           startsAt: attendance.classSession.startsAt.toISOString(),
           markedAt: attendance.markedAt.toISOString(),
         })),
+      },
+    });
+  }),
+);
+
+/**
+ * Renovacao de pacote (Transcricao 1:08:30): nao e "adicionar pontos avulsos"
+ * — e registrar uma nova venda de pacote pro aluno existente.
+ *
+ * Soma classCount do pacote ao saldo atual e atualiza packageName para o
+ * pacote ativo mais recente. Pagamento e a fora do sistema (caixa, PIX,
+ * cartao) — o cliente confirmou "a gente recebe tudo antes" (1:08:50).
+ * Quem opera vendas e coordenacao + diretor.
+ */
+router.post(
+  '/:studentId/renew',
+  requireAuth,
+  requireRole('diretor', 'coordenacao'),
+  asyncHandler(async (req, res) => {
+    const input = RenewSchema.parse(req.body);
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const student = await tx.student.findFirst({
+        where: { id: req.params.studentId, active: true },
+      });
+      if (!student) return { ok: false as const, error: 'student_not_found' as const };
+      if (unitScope && student.unitId !== unitScope) {
+        return { ok: false as const, error: 'unit_scope' as const };
+      }
+
+      const pkg = await tx.package.findFirst({ where: { id: input.packageId, active: true } });
+      if (!pkg) return { ok: false as const, error: 'package_not_found' as const };
+
+      const updated = await tx.student.update({
+        where: { id: student.id },
+        data: {
+          creditBalance: { increment: pkg.classCount },
+          packageName: pkg.name,
+        },
+        include: { unit: { select: { name: true } } },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'student',
+          entityId: student.id,
+          action: 'student.renewed',
+          before: {
+            packageName: student.packageName,
+            creditBalance: student.creditBalance,
+          },
+          after: {
+            packageId: pkg.id,
+            packageName: updated.packageName,
+            creditBalance: updated.creditBalance,
+            classesAdded: pkg.classCount,
+          },
+        },
+      });
+
+      return { ok: true as const, student: updated };
+    });
+
+    if (!result.ok) {
+      const map: Record<string, { status: number; message: string }> = {
+        student_not_found: { status: 404, message: 'Aluno nao encontrado.' },
+        unit_scope: { status: 403, message: 'Aluno fora da sua unidade.' },
+        package_not_found: { status: 404, message: 'Pacote nao encontrado.' },
+      };
+      const mapped = map[result.error];
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    res.json({
+      data: {
+        id: result.student.id,
+        name: result.student.name,
+        unitName: result.student.unit?.name ?? null,
+        packageName: result.student.packageName,
+        creditBalance: result.student.creditBalance,
       },
     });
   }),

@@ -88,6 +88,22 @@ describe('matriz de permissoes', () => {
     await request(app).post('/api/users').set('Cookie', coordenacao).send({}).expect(403);
   });
 
+  it('renovacao de pacote: diretor e coordenacao podem; professor nao', async () => {
+    const coordenacao = await login('coordenacao@voxrj.com');
+    const professor = await login('joao.p@voxrj.com');
+    // Corpo vazio cai em 400 (validacao) — comprova que passou pelo guard de papel.
+    await request(app)
+      .post('/api/students/stu_x/renew')
+      .set('Cookie', coordenacao)
+      .send({})
+      .expect(400);
+    await request(app)
+      .post('/api/students/stu_x/renew')
+      .set('Cookie', professor)
+      .send({})
+      .expect(403);
+  });
+
   it('pacotes: diretor e coordenacao leem; so o diretor gerencia', async () => {
     const coordenacao = await login('coordenacao@voxrj.com');
     const professor = await login('joao.p@voxrj.com');
