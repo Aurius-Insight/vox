@@ -3,14 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  // `url` e o conexao que a app usa em runtime (em prod Supabase: pooled
-  // PgBouncer com `?pgbouncer=true&connection_limit=1`).
-  // `directUrl` e usado pelas migrations (Prisma precisa de conexao direta
-  // pra criar prepared statements e gerenciar tipos).
-  // Em dev local os dois podem apontar para a mesma URL.
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  // URLs (url + directUrl) ficam em `prisma.config.ts` — Prisma 7 nao
+  // aceita mais essas chaves dentro do schema.
 }
 
 enum Role {
