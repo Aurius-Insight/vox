@@ -95,7 +95,7 @@ Guarda os 3 valores em senha-bank.
 ### 3. Vercel (~30 min)
 
 1. Em <https://vercel.com> → **New Project** → seleciona o repo
-   `GuiRCosta/vox-mvp`. Confirma branch `main` (ou `feat/vercel-supabase`
+   `Aurius-Insight/vox`. Confirma branch `main` (ou `feat/vercel-supabase`
    se quiser testar primeiro).
 
 2. **Configure Project**:

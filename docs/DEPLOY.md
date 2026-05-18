@@ -9,7 +9,7 @@ ambiente acessivel por URL publica.
 > pausa. Use um OU outro, nao os dois ao mesmo tempo.
 
 **Pre-requisito ja feito**: repo no GitHub em
-<https://github.com/GuiRCosta/vox-mvp> (privado).
+<https://github.com/Aurius-Insight/vox> (privado).
 
 ## Visao geral do que vai subir
 
