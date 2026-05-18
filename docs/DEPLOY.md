@@ -79,7 +79,7 @@ variaveis no Render no item 2.
 ## Item 2 — Render (provisionar tudo, ~20 min)
 
 Cria conta em <https://render.com> — login pelo GitHub e o caminho rapido
-(autoriza acesso ao repo `GuiRCosta/vox-mvp`). Depois, **na ordem**:
+(autoriza acesso ao repo `Aurius-Insight/vox`). Depois, **na ordem**:
 
 ### 2.a · Postgres
 
@@ -96,7 +96,7 @@ Cria conta em <https://render.com> — login pelo GitHub e o caminho rapido
 
 ### 2.c · API (Web Service)
 
-- **New → Web Service** → escolhe o repo `GuiRCosta/vox-mvp` (autoriza
+- **New → Web Service** → escolhe o repo `Aurius-Insight/vox` (autoriza
   se necessario)
 
 | Campo | Valor |
