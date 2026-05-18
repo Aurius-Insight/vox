@@ -4,6 +4,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // URLs (url + directUrl) ficam em `prisma.config.ts` — Prisma 7 nao
+  // aceita mais essas chaves dentro do schema.
 }
 
 enum Role {

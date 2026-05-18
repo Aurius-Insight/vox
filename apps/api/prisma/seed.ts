@@ -9,8 +9,10 @@ import { Pool } from 'pg';
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 dotenv.config();
 
+// Em Supabase usa-se DIRECT_URL (porta 5432) para seed/migrations — o pooler
+// (PgBouncer transaction mode) nao suporta tudo que o Prisma faz aqui.
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
 });
 
 const prisma = new PrismaClient({

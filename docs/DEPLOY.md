@@ -3,8 +3,13 @@
 Guia pratico, na ordem em que se faz, para subir o MVP da Vox RJ para um
 ambiente acessivel por URL publica.
 
+> **Alternativa**: [`DEPLOY_VERCEL.md`](./DEPLOY_VERCEL.md) cobre o mesmo
+> deploy usando **Vercel + Supabase** (2 fornecedores em vez de 1).
+> Trade-off principal: cold start de 2-5s no portal do aluno apos longa
+> pausa. Use um OU outro, nao os dois ao mesmo tempo.
+
 **Pre-requisito ja feito**: repo no GitHub em
-<https://github.com/GuiRCosta/vox-mvp> (privado).
+<https://github.com/Aurius-Insight/vox> (privado).
 
 ## Visao geral do que vai subir
 
@@ -74,7 +79,7 @@ variaveis no Render no item 2.
 ## Item 2 — Render (provisionar tudo, ~20 min)
 
 Cria conta em <https://render.com> — login pelo GitHub e o caminho rapido
-(autoriza acesso ao repo `GuiRCosta/vox-mvp`). Depois, **na ordem**:
+(autoriza acesso ao repo `Aurius-Insight/vox`). Depois, **na ordem**:
 
 ### 2.a · Postgres
 
@@ -91,7 +96,7 @@ Cria conta em <https://render.com> — login pelo GitHub e o caminho rapido
 
 ### 2.c · API (Web Service)
 
-- **New → Web Service** → escolhe o repo `GuiRCosta/vox-mvp` (autoriza
+- **New → Web Service** → escolhe o repo `Aurius-Insight/vox` (autoriza
   se necessario)
 
 | Campo | Valor |
