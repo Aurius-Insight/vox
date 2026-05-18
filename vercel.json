@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm ci && npm run db:generate && npm run build -w apps/web",
+  "buildCommand": "npm ci && npx --yes prisma generate && npm run build -w apps/web",
   "outputDirectory": "apps/web/dist",
   "framework": null,
   "functions": {

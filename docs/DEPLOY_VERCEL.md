@@ -14,7 +14,7 @@ nao os dois ao mesmo tempo.
                 │                                          │
    navegador ── ┤  /          → apps/web (estatico, CDN)   │
                 │  /api/*     → apps/api (serverless fn)   │
-                │  KV         → sessoes, magic link, rate  │
+                │  Upstash    → sessoes, magic link, rate  │
                 │                                          │
                 └────────────┬─────────────────────────────┘
                              │
@@ -118,12 +118,16 @@ Guarda os 3 valores em senha-bank.
    | `ADMIN_PASSWORD` | gerado no passo 1 |
    | `BOTCONVERSA_API_KEY` | (preencher quando obtiver) |
 
-4. **Storage → Create → KV Database** → nome `vox-mvp-kv`, regiao igual a do
-   projeto. O Vercel **injeta automaticamente** `KV_URL`,
-   `KV_REST_API_URL`, `KV_REST_API_TOKEN`, `KV_REST_API_READ_ONLY_TOKEN`.
+4. **Storage → Marketplace → Upstash for Redis → Add Integration**. Escolhe o
+   plano free (10k commands/dia), regiao igual a do projeto. O Vercel
+   **injeta automaticamente** `UPSTASH_REDIS_REST_URL` +
+   `UPSTASH_REDIS_REST_TOKEN` no projeto.
 
-   Nosso `redis.ts` detecta `KV_REST_API_URL` e troca pro adapter HTTP
+   Nosso `redis.ts` detecta `UPSTASH_REDIS_REST_URL` e troca pro adapter HTTP
    sozinho. Sem outra mudanca.
+
+   > **Por que Upstash e nao Vercel KV?** Vercel descontinuou o produto KV
+   > proprio em 2025 — Upstash via Marketplace e a substituicao oficial.
 
 5. **Deploy**. Primeira build ~3-5 min.
 

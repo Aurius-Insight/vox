@@ -7,11 +7,14 @@ import { logger } from '../lib/logger.js';
  * rate limit). Tem 2 implementacoes:
  *
  * - **IoRedisAdapter** (dev/test): TCP persistente, usa o Redis em Docker.
- * - **VercelKvAdapter** (prod em Vercel): HTTP via @vercel/kv, friendly com
- *   serverless (sem socket long-lived).
+ * - **UpstashRedisAdapter** (prod em Vercel): HTTP via @upstash/redis,
+ *   friendly com serverless (sem socket long-lived). Quando o usuario
+ *   instala "Upstash for Redis" na Vercel Marketplace, as env vars
+ *   `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` sao injetadas
+ *   automaticamente no projeto.
  *
- * O selector escolhe baseado em `KV_REST_API_URL` (env injetada
- * automaticamente quando Vercel KV esta provisionado).
+ * Nota: Vercel KV (produto proprio da Vercel) foi descontinuado em 2025;
+ * a recomendacao oficial e instalar Upstash via Marketplace.
  */
 export interface RedisLike {
   get(key: string): Promise<string | null>;
@@ -71,19 +74,20 @@ class IoRedisAdapter implements RedisLike {
   }
 }
 
-class VercelKvAdapter implements RedisLike {
-  // Lazy import: @vercel/kv so eh requerido em prod no Vercel; em dev/test
-  // nem precisa estar instalado se nao for ser carregado.
+class UpstashRedisAdapter implements RedisLike {
+  // Lazy import: @upstash/redis so eh carregado em prod com as vars
+  // UPSTASH_REDIS_REST_* presentes; em dev/test nem precisa do pacote.
   private readonly kv: any;
 
   constructor() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    this.kv = (require('@vercel/kv') as { kv: unknown }).kv;
+    const { Redis } = require('@upstash/redis');
+    this.kv = Redis.fromEnv();
   }
 
   async get(key: string) {
     const value = await this.kv.get(key);
-    // @vercel/kv desserializa JSON por default; sessoes/tokens sao strings simples.
+    // Upstash desserializa JSON por default; sessoes/tokens sao strings simples.
     return value == null ? null : String(value);
   }
   set(key: string, value: string, ttlSeconds?: number) {
@@ -110,16 +114,16 @@ class VercelKvAdapter implements RedisLike {
   keys(pattern: string) {
     return this.kv.keys(pattern);
   }
-  // KV e HTTP-based; nao ha conexao a fechar.
+  // HTTP-based; nao ha conexao a fechar.
   async quit() {
     return undefined;
   }
 }
 
 function buildRedis(): RedisLike {
-  const useVercelKv =
-    !!process.env.KV_REST_API_URL && !!process.env.KV_REST_API_TOKEN;
-  return useVercelKv ? new VercelKvAdapter() : new IoRedisAdapter(env.REDIS_URL);
+  const useUpstash =
+    !!process.env.UPSTASH_REDIS_REST_URL && !!process.env.UPSTASH_REDIS_REST_TOKEN;
+  return useUpstash ? new UpstashRedisAdapter() : new IoRedisAdapter(env.REDIS_URL);
 }
 
 export const redis: RedisLike = buildRedis();
