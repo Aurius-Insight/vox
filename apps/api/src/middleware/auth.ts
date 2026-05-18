@@ -56,13 +56,13 @@ async function publicUser(userId: string) {
 
 export async function createUserSession(userId: string) {
   const sessionId = randomUUID();
-  await redis.set(userSessionKey(sessionId), userId, 'EX', SESSION_TTL_SECONDS);
+  await redis.set(userSessionKey(sessionId), userId, SESSION_TTL_SECONDS);
   return sessionId;
 }
 
 export async function createPortalSession(studentId: string) {
   const sessionId = randomUUID();
-  await redis.set(portalSessionKey(sessionId), studentId, 'EX', PORTAL_SESSION_TTL_SECONDS);
+  await redis.set(portalSessionKey(sessionId), studentId, PORTAL_SESSION_TTL_SECONDS);
   return sessionId;
 }
 

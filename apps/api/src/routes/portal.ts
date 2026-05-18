@@ -76,7 +76,7 @@ router.post(
     }
 
     const token = randomUUID();
-    await redis.set(magicLinkKey(token), student.id, 'EX', MAGIC_LINK_TTL_SECONDS);
+    await redis.set(magicLinkKey(token), student.id, MAGIC_LINK_TTL_SECONDS);
     const link = `${env.APP_ORIGIN}/portal/entrar?token=${token}`;
 
     // Tenta entregar via BotConversa. Falha de envio nao deve revelar nada

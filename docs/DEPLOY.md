@@ -3,6 +3,11 @@
 Guia pratico, na ordem em que se faz, para subir o MVP da Vox RJ para um
 ambiente acessivel por URL publica.
 
+> **Alternativa**: [`DEPLOY_VERCEL.md`](./DEPLOY_VERCEL.md) cobre o mesmo
+> deploy usando **Vercel + Supabase** (2 fornecedores em vez de 1).
+> Trade-off principal: cold start de 2-5s no portal do aluno apos longa
+> pausa. Use um OU outro, nao os dois ao mesmo tempo.
+
 **Pre-requisito ja feito**: repo no GitHub em
 <https://github.com/GuiRCosta/vox-mvp> (privado).
 

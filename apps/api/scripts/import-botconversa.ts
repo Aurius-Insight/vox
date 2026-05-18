@@ -18,7 +18,11 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Script roda fora do servidor (one-shot); prefere DIRECT_URL pra escapar do
+// pooler do Supabase, que pode atrapalhar volumes de upsert em transacao.
+const pool = new Pool({
+  connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
+});
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 type TagEntry = { id: number; name: string };

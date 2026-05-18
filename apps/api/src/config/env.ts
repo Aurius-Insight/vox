@@ -10,6 +10,11 @@ const EnvSchema = z.object({
   APP_ORIGIN: z.string().url().default('http://localhost:5173'),
   PORT: z.coerce.number().int().positive().default(3333),
   DATABASE_URL: z.string().min(1),
+  // Usado pelas migrations (Prisma direct connection). Em dev local pode ser
+  // igual ao DATABASE_URL; em prod com Supabase, deve ser a URL "Direct"
+  // (porta 5432), enquanto DATABASE_URL e a do pooler (porta 6543).
+  DIRECT_URL: z.string().optional(),
+  // Em prod (Vercel) usamos Vercel KV via HTTP — REDIS_URL fica opcional.
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   SESSION_SECRET: z.string().min(32),
   WEBHOOK_SECRET: z.string().min(24),
