@@ -1,0 +1,109 @@
+# Stack de PRODUCAO — VPS propria com Postgres + Redis + API + Web,
+# atras do Traefik (rede externa `web`).
+#
+# Uso na VPS:  docker compose -f docker-compose.prod.yml up -d --build
+#
+# O `docker-compose.yml` (sem sufixo) e a stack de DEV local (so Postgres
+# e Redis, portas 5433/6380) — nao confundir.
+#
+# Secrets vem do .env ao lado deste arquivo (nao versionado).
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vox-postgres
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 1g
+    mem_reservation: 256m
+    environment:
+      POSTGRES_USER: vox
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: vox
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vox -d vox"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: vox-redis
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 256m
+    mem_reservation: 32m
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: vox-api:latest
+    container_name: vox-api
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 1g
+    mem_reservation: 256m
+    environment:
+      NODE_ENV: production
+      TZ: America/Sao_Paulo
+      PORT: 3333
+      APP_ORIGIN: https://vox.voxrio.xyz
+      DATABASE_URL: postgresql://vox:${POSTGRES_PASSWORD}@postgres:5432/vox
+      DIRECT_URL: postgresql://vox:${POSTGRES_PASSWORD}@postgres:5432/vox
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: ${SESSION_SECRET}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      BOTCONVERSA_API_KEY: ${BOTCONVERSA_API_KEY}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [internal, web]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.vox-api.rule=Host(`vox.voxrio.xyz`) && PathPrefix(`/api`)
+      - traefik.http.routers.vox-api.entrypoints=websecure
+      - traefik.http.routers.vox-api.tls.certresolver=le
+      - traefik.http.routers.vox-api.priority=10
+      - traefik.http.services.vox-api.loadbalancer.server.port=3333
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: vox-web:latest
+    container_name: vox-web
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    mem_reservation: 16m
+    networks: [web]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - traefik.http.routers.vox-web.rule=Host(`vox.voxrio.xyz`)
+      - traefik.http.routers.vox-web.entrypoints=websecure
+      - traefik.http.routers.vox-web.tls.certresolver=le
+      - traefik.http.routers.vox-web.priority=1
+      - traefik.http.services.vox-web.loadbalancer.server.port=80
+
+networks:
+  internal:
+  web:
+    external: true
+
+volumes:
+  postgres_data:
+  redis_data:
