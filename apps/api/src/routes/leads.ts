@@ -8,6 +8,7 @@ import { ApiError, asyncHandler, maskCpf, maskPhone, parsePagination } from '../
 import { hashCpf, normalizeCpf } from '../lib/cpf.js';
 import { canConvertLead, uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
+import { leadSearchConditions } from '../domain/lead-search.js';
 
 const router = Router();
 
@@ -88,16 +89,7 @@ router.get(
     const where: Prisma.LeadWhereInput = {
       ...(query.stage ? { stage: query.stage } : {}),
       ...(query.unit ? { unitInterest: query.unit } : {}),
-      ...(query.search
-        ? {
-            OR: [
-              { name: { contains: query.search, mode: 'insensitive' } },
-              { whatsapp: { contains: query.search.replace(/\D/g, '') } },
-              { unitInterest: { contains: query.search, mode: 'insensitive' } },
-              { campaign: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
+      ...(query.search ? { OR: leadSearchConditions(query.search) } : {}),
     };
 
     const [items, total] = await Promise.all([
