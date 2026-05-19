@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+dist
+**/dist
+apps/web/public/sw.js.map
+.env
+.env.local
+backups
+*.log
+.git
+.github
+.vscode
+.idea
+*.tsbuildinfo
+**/*.tsbuildinfo
