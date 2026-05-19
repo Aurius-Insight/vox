@@ -88,6 +88,20 @@ describe('matriz de permissoes', () => {
     await request(app).post('/api/users').set('Cookie', coordenacao).send({}).expect(403);
   });
 
+  it('gerar magic link de aluno: diretor e coordenacao podem; professor nao', async () => {
+    const coordenacao = await login('coordenacao@voxrj.com');
+    const professor = await login('joao.p@voxrj.com');
+    // stu_x nao existe -> 404 comprova que coordenacao passou pelo guard de papel.
+    await request(app)
+      .post('/api/students/stu_x/magic-link')
+      .set('Cookie', coordenacao)
+      .expect(404);
+    await request(app)
+      .post('/api/students/stu_x/magic-link')
+      .set('Cookie', professor)
+      .expect(403);
+  });
+
   it('renovacao de pacote: diretor e coordenacao podem; professor nao', async () => {
     const coordenacao = await login('coordenacao@voxrj.com');
     const professor = await login('joao.p@voxrj.com');

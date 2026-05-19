@@ -1,16 +1,12 @@
-# Build do frontend Vite. Precisa dos types Prisma gerados (apps/web importa
-# Role do @prisma/client via apps/api). Por isso instalamos os 2 workspaces.
+# Build do frontend Vite. Nao precisa do Prisma client — apps/web nao importa
+# @prisma/client (tipos sao duplicados via string literals em AuthProvider).
 FROM node:22-alpine AS builder
-RUN apk add --no-cache python3 make g++ openssl
 WORKDIR /app
 
-COPY package*.json prisma.config.ts ./
-COPY apps/api/package.json ./apps/api/
+COPY package*.json ./
 COPY apps/web/package.json ./apps/web/
-RUN npm ci
-
-COPY apps/api/prisma ./apps/api/prisma
-RUN npx prisma generate
+# Instala so o workspace web pra economizar tempo de build e tamanho.
+RUN npm ci -w apps/web --include-workspace-root
 
 COPY apps/web ./apps/web
 RUN npm run build -w apps/web

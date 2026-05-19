@@ -12,6 +12,10 @@ RUN npm ci
 
 # Copia o codigo (schema + src) e gera o Prisma client + build TS.
 COPY apps/api ./apps/api
+# `prisma generate` so usa a URL pra preencher o template (nao conecta),
+# mas o `prisma.config.ts` exige a env existir. Valor dummy no build stage.
+ENV DATABASE_URL=postgresql://x:x@x:5432/x
+ENV DIRECT_URL=postgresql://x:x@x:5432/x
 RUN npx prisma generate
 RUN npm run build -w apps/api
 
@@ -25,6 +29,12 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 COPY --from=builder /app/apps/api/package.json ./apps/api/
+# `src` + `scripts` ficam no runtime pra `tsx apps/api/scripts/*` (import,
+# migrate, seed one-shot). `tsx` esta em devDependencies mas vem junto
+# pelo `npm ci` na build stage.
+COPY --from=builder /app/apps/api/src ./apps/api/src
+COPY --from=builder /app/apps/api/scripts ./apps/api/scripts
+COPY --from=builder /app/apps/api/tsconfig.json ./apps/api/
 COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json ./

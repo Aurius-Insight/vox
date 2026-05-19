@@ -6,6 +6,7 @@ import { ApiError, asyncHandler, maskCpf, maskPhone } from '../lib/http.js';
 import { hashCpf, normalizeCpf } from '../lib/cpf.js';
 import { uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
+import { createMagicLink, MAGIC_LINK_TTL_SECONDS } from '../lib/magic-link.js';
 
 const router = Router();
 
@@ -311,6 +312,48 @@ router.post(
         packageName: result.student.packageName,
         creditBalance: result.student.creditBalance,
       },
+    });
+  }),
+);
+
+/**
+ * Gera um link magico de acesso ao portal para a equipe interna repassar ao
+ * aluno (WhatsApp, e-mail, presencial). Util quando o numero do aluno nao
+ * esta no BotConversa (cadastro avulso) ou quando ele perdeu o link.
+ *
+ * Diferente de POST /api/portal/magic-links, este NAO envia nada — devolve
+ * a URL para o operador logado copiar. Exige sessao interna (diretor ou
+ * coordenacao); o token continua sendo de uso unico e expira em 15 min.
+ */
+router.post(
+  '/:studentId/magic-link',
+  requireAuth,
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const student = await prisma.student.findFirst({
+      where: { id: req.params.studentId, active: true },
+    });
+    if (!student) throw new ApiError(404, 'student_not_found', 'Aluno nao encontrado.');
+    if (unitScope && student.unitId !== unitScope) {
+      throw new ApiError(403, 'unit_scope', 'Aluno fora da sua unidade.');
+    }
+
+    const { link } = await createMagicLink(student.id);
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: req.user!.id,
+        actorType: 'user',
+        entityType: 'student',
+        entityId: student.id,
+        action: 'student.magic_link_generated',
+      },
+    });
+
+    res.json({
+      data: { link, expiresInMinutes: MAGIC_LINK_TTL_SECONDS / 60 },
     });
   }),
 );

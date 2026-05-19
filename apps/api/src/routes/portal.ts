@@ -1,10 +1,8 @@
 import { Router } from 'express';
-import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { env } from '../config/env.js';
 import { prisma } from '../db/client.js';
-import { redis } from '../db/redis.js';
 import {
   clearPortalSession,
   createPortalSession,
@@ -16,12 +14,10 @@ import { ApiError, asyncHandler } from '../lib/http.js';
 import { hashCpf } from '../lib/cpf.js';
 import { canBookClass, canCancelBooking } from '../domain/booking.js';
 import { sendMessageByPhone } from '../lib/botconversa.js';
+import { createMagicLink, consumeMagicLink } from '../lib/magic-link.js';
 import { logger, serializeError } from '../lib/logger.js';
 
 const router = Router();
-
-const MAGIC_LINK_TTL_SECONDS = 15 * 60;
-const magicLinkKey = (token: string) => `magic:${token}`;
 
 const SERIALIZATION_FAILURE_CODE = 'P2034';
 const MAX_BOOKING_RETRIES = 3;
@@ -75,9 +71,7 @@ router.post(
       return res.json({ sent: true });
     }
 
-    const token = randomUUID();
-    await redis.set(magicLinkKey(token), student.id, MAGIC_LINK_TTL_SECONDS);
-    const link = `${env.APP_ORIGIN}/portal/entrar?token=${token}`;
+    const { link } = await createMagicLink(student.id);
 
     // Tenta entregar via BotConversa. Falha de envio nao deve revelar nada
     // ao caller (poderia enumerar alunos), mas precisa ficar nos logs.
@@ -108,8 +102,8 @@ router.post(
   asyncHandler(async (req, res) => {
     const input = PortalSessionSchema.parse(req.body);
 
-    // GETDEL garante uso unico do link magico de forma atomica.
-    const studentId = await redis.getdel(magicLinkKey(input.token));
+    // Uso unico e atomico do link magico (GETDEL no Redis).
+    const studentId = await consumeMagicLink(input.token);
     if (!studentId) {
       throw new ApiError(401, 'invalid_magic_link', 'Link invalido ou expirado.');
     }

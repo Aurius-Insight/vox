@@ -37,6 +37,7 @@ export function AlunosPage() {
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
+  const [linkPendingId, setLinkPendingId] = useState<string>();
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [saving, setSaving] = useState(false);
@@ -65,6 +66,34 @@ export function AlunosPage() {
 
   function updateField(field: keyof StudentForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  /**
+   * Gera um link magico de acesso ao portal e copia pro clipboard — a equipe
+   * repassa ao aluno por qualquer canal. O link e de uso unico e expira.
+   */
+  async function handleGenerateLink(studentId: string) {
+    setLinkPendingId(studentId);
+    setError('');
+    setInfo('');
+    try {
+      const response = await api<{ data: { link: string; expiresInMinutes: number } }>(
+        `/api/students/${studentId}/magic-link`,
+        { method: 'POST' },
+      );
+      const { link, expiresInMinutes } = response.data;
+      try {
+        await navigator.clipboard.writeText(link);
+        setInfo(`Link copiado (valido ${expiresInMinutes} min): ${link}`);
+      } catch {
+        // Clipboard pode falhar (permissao/contexto) — mostra pra copiar manual.
+        setInfo(`Link de acesso (valido ${expiresInMinutes} min): ${link}`);
+      }
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel gerar o link.');
+    } finally {
+      setLinkPendingId(undefined);
+    }
   }
 
   async function openStudent(id: string) {
@@ -239,12 +268,13 @@ export function AlunosPage() {
                 <th>Matricula</th>
                 <th>Unidade</th>
                 <th>Saldo</th>
+                <th>Acesso</th>
               </tr>
             </thead>
             <tbody>
               {students.length === 0 && (
                 <tr>
-                  <td colSpan={4}>Nenhum aluno cadastrado.</td>
+                  <td colSpan={5}>Nenhum aluno cadastrado.</td>
                 </tr>
               )}
               {students.map((student) => (
@@ -257,6 +287,20 @@ export function AlunosPage() {
                   <td>{student.enrollmentCode}</td>
                   <td>{student.unitName ?? '-'}</td>
                   <td>{student.creditBalance}</td>
+                  <td>
+                    {/* stopPropagation: o clique gera o link sem abrir o detalhe. */}
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={linkPendingId === student.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleGenerateLink(student.id);
+                      }}
+                    >
+                      {linkPendingId === student.id ? 'Gerando...' : 'Gerar link'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
