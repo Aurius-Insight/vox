@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
-import type { Package, StudentDetail, StudentSummary, Unit } from '../api/types';
+import type { Lead, Package, StudentDetail, StudentSummary, Unit } from '../api/types';
 import { formatDate, formatDateTime } from '../lib/format';
 
 type StudentForm = {
@@ -34,12 +34,9 @@ const EMPTY_EDIT_FORM: EditStudentForm = { name: '', whatsapp: '', email: '', un
 export function AlunosPage() {
   const auth = useAuth();
   const canCreate = (auth.user?.roles ?? []).some((role) => role === 'diretor');
-  // Renovacao opera vendas: diretor + coordenacao podem (igual ao convert).
-  const canRenew = (auth.user?.roles ?? []).some(
-    (role) => role === 'diretor' || role === 'coordenacao',
-  );
-  // Edicao cadastral: mesmos papeis que operam o aluno (diretor + coordenacao).
-  const canEdit = (auth.user?.roles ?? []).some(
+  // Diretor e coordenacao operam o aluno: renovar pacote, editar cadastro e
+  // converter leads do pipeline. O cadastro avulso e so do diretor (canCreate).
+  const canOperate = (auth.user?.roles ?? []).some(
     (role) => role === 'diretor' || role === 'coordenacao',
   );
 
@@ -52,6 +49,12 @@ export function AlunosPage() {
   const [renewSaving, setRenewSaving] = useState(false);
   const [editForm, setEditForm] = useState<EditStudentForm>(EMPTY_EDIT_FORM);
   const [editSaving, setEditSaving] = useState(false);
+  const [leadSearch, setLeadSearch] = useState('');
+  const [leadResults, setLeadResults] = useState<Lead[]>([]);
+  const [leadSearching, setLeadSearching] = useState(false);
+  const [convertLead, setConvertLead] = useState<Lead>();
+  const [convertForm, setConvertForm] = useState({ cpf: '', unitId: '', packageId: '' });
+  const [convertSaving, setConvertSaving] = useState(false);
   const [linkPendingId, setLinkPendingId] = useState<string>();
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -78,6 +81,35 @@ export function AlunosPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Busca de leads no pipeline com debounce de 300ms. Leads ja matriculados
+  // saem da lista — nao podem ser convertidos de novo.
+  useEffect(() => {
+    const term = leadSearch.trim();
+    if (term.length < 2) {
+      setLeadResults([]);
+      return;
+    }
+    let active = true;
+    const timer = setTimeout(async () => {
+      setLeadSearching(true);
+      try {
+        const params = new URLSearchParams({ search: term, pageSize: '20' });
+        const response = await api<{ data: Lead[] }>(`/api/leads?${params.toString()}`);
+        if (active) {
+          setLeadResults(response.data.filter((lead) => lead.stage !== 'matriculado'));
+        }
+      } catch {
+        if (active) setLeadResults([]);
+      } finally {
+        if (active) setLeadSearching(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [leadSearch]);
 
   function updateField(field: keyof StudentForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -193,6 +225,52 @@ export function AlunosPage() {
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar o aluno.');
     } finally {
       setEditSaving(false);
+    }
+  }
+
+  function selectLead(lead: Lead) {
+    setConvertLead(lead);
+    setError('');
+    setInfo('');
+    // Tenta casar a unidade de interesse do lead (texto livre) com uma real.
+    const matchedUnit = units.find((unit) => unit.name === lead.unitInterest);
+    setConvertForm({ cpf: '', unitId: matchedUnit?.id ?? '', packageId: '' });
+  }
+
+  /**
+   * Converte o lead selecionado em aluno reusando POST /leads/:id/convert —
+   * o mesmo fluxo da pagina de Vendas. Mantem o vinculo lead->aluno (origem)
+   * e move o lead para "matriculado".
+   */
+  async function handleConvertLead(event: FormEvent) {
+    event.preventDefault();
+    if (!convertLead) return;
+    setError('');
+    setInfo('');
+    setConvertSaving(true);
+
+    try {
+      const response = await api<{
+        data: { student: { name: string; enrollmentCode: string; packageName: string } };
+      }>(`/api/leads/${convertLead.id}/convert`, {
+        method: 'POST',
+        body: JSON.stringify({
+          cpf: convertForm.cpf,
+          unitId: convertForm.unitId,
+          packageId: convertForm.packageId,
+        }),
+      });
+      const { name, enrollmentCode, packageName } = response.data.student;
+      setInfo(`${name} matriculado a partir do lead. Matricula ${enrollmentCode} - ${packageName}.`);
+      setConvertLead(undefined);
+      setConvertForm({ cpf: '', unitId: '', packageId: '' });
+      setLeadSearch('');
+      setLeadResults([]);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel converter o lead.');
+    } finally {
+      setConvertSaving(false);
     }
   }
 
@@ -318,6 +396,111 @@ export function AlunosPage() {
         </section>
       )}
 
+      {canOperate && (
+        <section className="form-card">
+          <h2>Converter lead em aluno</h2>
+          <p className="muted-text">
+            Busca um contato do pipeline de Vendas e matricula. Mantem o vinculo com o
+            lead (origem/campanha) e move ele para "matriculado".
+          </p>
+          <label>
+            Buscar lead
+            <input
+              value={leadSearch}
+              onChange={(event) => setLeadSearch(event.target.value)}
+              placeholder="Nome, WhatsApp ou campanha"
+            />
+          </label>
+
+          {leadSearch.trim().length >= 2 && !convertLead && (
+            <div className="stack">
+              {leadSearching && <p className="muted-text">Buscando...</p>}
+              {!leadSearching && leadResults.length === 0 && (
+                <p className="muted-text">Nenhum lead disponivel para conversao.</p>
+              )}
+              {leadResults.map((lead) => (
+                <button
+                  type="button"
+                  key={lead.id}
+                  className="secondary-button"
+                  onClick={() => selectLead(lead)}
+                >
+                  {lead.name} - {lead.whatsapp} - {lead.unitInterest}
+                  {lead.campaign ? ` - ${lead.campaign}` : ''}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {convertLead && (
+            <div className="stack">
+              <p className="muted-text">
+                Convertendo <strong>{convertLead.name}</strong> ({convertLead.whatsapp}).
+              </p>
+              <form className="grid-form" onSubmit={handleConvertLead}>
+                <label>
+                  CPF
+                  <input
+                    value={convertForm.cpf}
+                    onChange={(event) =>
+                      setConvertForm((current) => ({ ...current, cpf: event.target.value }))
+                    }
+                    inputMode="numeric"
+                    required
+                  />
+                </label>
+                <label>
+                  Unidade
+                  <select
+                    value={convertForm.unitId}
+                    onChange={(event) =>
+                      setConvertForm((current) => ({ ...current, unitId: event.target.value }))
+                    }
+                    required
+                  >
+                    <option value="">Selecione</option>
+                    {units.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Pacote
+                  <select
+                    value={convertForm.packageId}
+                    onChange={(event) =>
+                      setConvertForm((current) => ({ ...current, packageId: event.target.value }))
+                    }
+                    required
+                  >
+                    <option value="">Selecione</option>
+                    {packages.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.classCount} aulas)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="grid-form-actions">
+                  <button type="submit" disabled={convertSaving}>
+                    {convertSaving ? 'Convertendo...' : 'Converter em aluno'}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setConvertLead(undefined)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="split-grid">
         <section className="table-card">
           <table>
@@ -392,7 +575,7 @@ export function AlunosPage() {
                 )}
               </div>
 
-              {canEdit && (
+              {canOperate && (
                 <div>
                   <h3>Editar dados</h3>
                   <p className="muted-text">
@@ -447,7 +630,7 @@ export function AlunosPage() {
                 </div>
               )}
 
-              {canRenew && (
+              {canOperate && (
                 <div>
                   <h3>Renovar pacote</h3>
                   <p className="muted-text">
