@@ -102,6 +102,22 @@ describe('matriz de permissoes', () => {
       .expect(403);
   });
 
+  it('editar aluno: diretor e coordenacao podem; professor nao', async () => {
+    const coordenacao = await login('coordenacao@voxrj.com');
+    const professor = await login('joao.p@voxrj.com');
+    // stu_x nao existe -> 404 comprova que coordenacao passou pelo guard de papel.
+    await request(app)
+      .patch('/api/students/stu_x')
+      .set('Cookie', coordenacao)
+      .send({ name: 'Nome Editado' })
+      .expect(404);
+    await request(app)
+      .patch('/api/students/stu_x')
+      .set('Cookie', professor)
+      .send({ name: 'Nome Editado' })
+      .expect(403);
+  });
+
   it('renovacao de pacote: diretor e coordenacao podem; professor nao', async () => {
     const coordenacao = await login('coordenacao@voxrj.com');
     const professor = await login('joao.p@voxrj.com');

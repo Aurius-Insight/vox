@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
@@ -24,6 +25,20 @@ const CreateStudentSchema = z.object({
 const RenewSchema = z.object({
   packageId: z.string().min(1),
 });
+
+// Edicao cadastral: campos operacionais. O CPF fica de fora de proposito —
+// e a chave de identidade/dedup do aluno (cpfHash). String vazia no e-mail
+// significa "limpar o campo".
+const UpdateStudentSchema = z
+  .object({
+    name: z.string().min(2).max(120).optional(),
+    whatsapp: z.string().min(8).max(30).optional(),
+    email: z.string().email().max(160).or(z.literal('')).optional(),
+    unitId: z.string().min(1).optional(),
+  })
+  .refine((data) => Object.values(data).some((value) => value !== undefined), {
+    message: 'Informe ao menos um campo para atualizar.',
+  });
 
 router.get(
   '/',
@@ -228,6 +243,107 @@ router.get(
           startsAt: attendance.classSession.startsAt.toISOString(),
           markedAt: attendance.markedAt.toISOString(),
         })),
+      },
+    });
+  }),
+);
+
+/**
+ * Edicao dos dados cadastrais do aluno — nome, WhatsApp, e-mail e unidade.
+ * O CPF NAO e editavel (chave de identidade). Quem opera: diretor e
+ * coordenacao; a coordenacao so edita/move alunos dentro da sua unidade.
+ */
+router.patch(
+  '/:studentId',
+  requireAuth,
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const input = UpdateStudentSchema.parse(req.body);
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const student = await tx.student.findFirst({
+        where: { id: req.params.studentId, active: true },
+      });
+      if (!student) return { ok: false as const, error: 'student_not_found' as const };
+      if (unitScope && student.unitId !== unitScope) {
+        return { ok: false as const, error: 'unit_scope' as const };
+      }
+
+      // Troca de unidade: destino precisa existir/estar ativo, e a coordenacao
+      // so consegue mover o aluno para dentro da propria unidade.
+      if (input.unitId && input.unitId !== student.unitId) {
+        if (unitScope && unitScope !== input.unitId) {
+          return { ok: false as const, error: 'unit_scope_target' as const };
+        }
+        const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
+        if (!unit) return { ok: false as const, error: 'unit_not_found' as const };
+      }
+
+      const data: Prisma.StudentUpdateInput = {};
+      if (input.name !== undefined) data.name = input.name;
+      if (input.whatsapp !== undefined) data.whatsapp = input.whatsapp.replace(/\D/g, '');
+      if (input.email !== undefined) data.email = input.email === '' ? null : input.email;
+      if (input.unitId !== undefined) data.unit = { connect: { id: input.unitId } };
+
+      const updated = await tx.student.update({
+        where: { id: student.id },
+        data,
+        include: { unit: { select: { name: true } } },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'student',
+          entityId: student.id,
+          action: 'student.updated',
+          before: {
+            name: student.name,
+            whatsapp: student.whatsapp,
+            email: student.email,
+            unitId: student.unitId,
+          },
+          after: {
+            name: updated.name,
+            whatsapp: updated.whatsapp,
+            email: updated.email,
+            unitId: updated.unitId,
+          },
+        },
+      });
+
+      return { ok: true as const, student: updated };
+    });
+
+    if (!result.ok) {
+      const map: Record<string, { status: number; message: string }> = {
+        student_not_found: { status: 404, message: 'Aluno nao encontrado.' },
+        unit_scope: { status: 403, message: 'Aluno fora da sua unidade.' },
+        unit_scope_target: {
+          status: 403,
+          message: 'Voce so pode mover alunos para a sua unidade.',
+        },
+        unit_not_found: { status: 404, message: 'Unidade nao encontrada.' },
+      };
+      const mapped = map[result.error];
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    res.json({
+      data: {
+        id: result.student.id,
+        name: result.student.name,
+        enrollmentCode: result.student.enrollmentCode,
+        whatsapp: maskPhone(result.student.whatsapp),
+        email: result.student.email ?? undefined,
+        cpf: result.student.cpfMasked ?? undefined,
+        unitId: result.student.unitId,
+        unitName: result.student.unit?.name ?? null,
+        packageName: result.student.packageName,
+        creditBalance: result.student.creditBalance,
+        status: result.student.active ? 'ativo' : 'inativo',
       },
     });
   }),

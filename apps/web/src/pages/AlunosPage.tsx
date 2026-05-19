@@ -22,11 +22,24 @@ const EMPTY_FORM: StudentForm = {
   packageId: '',
 };
 
+type EditStudentForm = {
+  name: string;
+  whatsapp: string;
+  email: string;
+  unitId: string;
+};
+
+const EMPTY_EDIT_FORM: EditStudentForm = { name: '', whatsapp: '', email: '', unitId: '' };
+
 export function AlunosPage() {
   const auth = useAuth();
   const canCreate = (auth.user?.roles ?? []).some((role) => role === 'diretor');
   // Renovacao opera vendas: diretor + coordenacao podem (igual ao convert).
   const canRenew = (auth.user?.roles ?? []).some(
+    (role) => role === 'diretor' || role === 'coordenacao',
+  );
+  // Edicao cadastral: mesmos papeis que operam o aluno (diretor + coordenacao).
+  const canEdit = (auth.user?.roles ?? []).some(
     (role) => role === 'diretor' || role === 'coordenacao',
   );
 
@@ -37,6 +50,8 @@ export function AlunosPage() {
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
+  const [editForm, setEditForm] = useState<EditStudentForm>(EMPTY_EDIT_FORM);
+  const [editSaving, setEditSaving] = useState(false);
   const [linkPendingId, setLinkPendingId] = useState<string>();
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -66,6 +81,10 @@ export function AlunosPage() {
 
   function updateField(field: keyof StudentForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateEditField(field: keyof EditStudentForm, value: string) {
+    setEditForm((current) => ({ ...current, [field]: value }));
   }
 
   /**
@@ -103,6 +122,14 @@ export function AlunosPage() {
       const response = await api<{ data: StudentDetail }>(`/api/students/${id}`);
       setSelected(response.data);
       setRenewPackageId('');
+      // WhatsApp vem mascarado da API — o campo comeca vazio e so e enviado
+      // se a equipe digitar um numero novo.
+      setEditForm({
+        name: response.data.name,
+        whatsapp: '',
+        email: response.data.email ?? '',
+        unitId: response.data.unitId ?? '',
+      });
     } catch {
       setError('Nao foi possivel abrir o aluno.');
     } finally {
@@ -134,6 +161,38 @@ export function AlunosPage() {
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel renovar o pacote.');
     } finally {
       setRenewSaving(false);
+    }
+  }
+
+  async function handleEditStudent(event: FormEvent) {
+    event.preventDefault();
+    if (!selected) return;
+    setError('');
+    setInfo('');
+    setEditSaving(true);
+
+    try {
+      // Nome e e-mail vao sempre (e-mail vazio limpa o campo); WhatsApp e
+      // unidade so quando preenchidos — WhatsApp em branco mantem o atual.
+      const body: Record<string, string> = {
+        name: editForm.name,
+        email: editForm.email,
+      };
+      const whatsapp = editForm.whatsapp.trim();
+      if (whatsapp) body.whatsapp = whatsapp;
+      if (editForm.unitId) body.unitId = editForm.unitId;
+
+      const response = await api<{ data: { name: string } }>(`/api/students/${selected.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      setInfo(`${response.data.name}: dados atualizados.`);
+      await openStudent(selected.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar o aluno.');
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -332,6 +391,61 @@ export function AlunosPage() {
                   </p>
                 )}
               </div>
+
+              {canEdit && (
+                <div>
+                  <h3>Editar dados</h3>
+                  <p className="muted-text">
+                    Nome, WhatsApp, e-mail e unidade. O CPF nao e editavel.
+                  </p>
+                  <form className="grid-form" onSubmit={handleEditStudent}>
+                    <label>
+                      Nome
+                      <input
+                        value={editForm.name}
+                        onChange={(event) => updateEditField('name', event.target.value)}
+                        required
+                      />
+                    </label>
+                    <label>
+                      WhatsApp
+                      <input
+                        value={editForm.whatsapp}
+                        onChange={(event) => updateEditField('whatsapp', event.target.value)}
+                        placeholder={`Atual: ${selected.whatsapp} - preencha so para trocar`}
+                      />
+                    </label>
+                    <label>
+                      E-mail
+                      <input
+                        type="email"
+                        value={editForm.email}
+                        onChange={(event) => updateEditField('email', event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Unidade
+                      <select
+                        value={editForm.unitId}
+                        onChange={(event) => updateEditField('unitId', event.target.value)}
+                        required
+                      >
+                        <option value="">Selecione</option>
+                        {units.map((unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="grid-form-actions">
+                      <button type="submit" disabled={editSaving}>
+                        {editSaving ? 'Salvando...' : 'Salvar alteracoes'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
 
               {canRenew && (
                 <div>
