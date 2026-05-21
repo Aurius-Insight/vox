@@ -1,62 +1,64 @@
 @import './fonts.css';
 
 :root {
-  /* Identidade VOX: base creme quente, dourado como cor de acao, tinta quente.
-     Os componentes consomem os tokens por nome — trocar valores aqui re-veste
-     o app inteiro. Tema escuro abaixo, em :root[data-theme='dark']. */
+  /* Identidade: design-system.html (GenLabs) e a fonte da verdade — base zinc
+     neutra, laranja como acento, sombras marcadas, cantos arredondados.
+     Componentes consomem os tokens por nome; trocar valores re-veste o app.
+     Tema escuro abaixo, em :root[data-theme='dark']. */
 
-  /* Superficies */
-  --background: #f4f1e9;
+  /* Superficies — escala zinc */
+  --background: #fafafa;
   --surface: #ffffff;
-  --surface-2: #faf7f0;
-  --surface-sunken: #ebe6da;
-  --sidebar-bg: rgba(255, 255, 255, 0.78);
+  --surface-2: #f4f4f5;
+  --surface-sunken: #e4e4e7;
+  --sidebar-bg: rgba(255, 255, 255, 0.8);
 
-  /* Texto */
-  --primary: #1c1813;
-  --text: #2a2419;
-  --text-muted: #6c6453;
-  --text-soft: #9a917d;
+  /* Texto — zinc */
+  --primary: #18181b;
+  --text: #18181b;
+  --text-muted: #52525b;
+  --text-soft: #a1a1aa;
 
-  /* Acento — dourado VOX */
-  --accent: #c2912a;
-  --accent-hover: #aa7d1d;
-  --accent-soft: rgba(194, 145, 42, 0.14);
-  --accent-ring: rgba(194, 145, 42, 0.4);
-  --accent-text: #8a6312; /* dourado escuro: legivel como texto em fundo claro */
-  --on-accent: #221d10; /* tinta escura: texto sobre superficie dourada */
-  --secondary: #c2912a;
+  /* Acento — laranja */
+  --accent: #f97316;
+  --accent-hover: #ea580c;
+  --accent-soft: rgba(249, 115, 22, 0.12);
+  --accent-ring: rgba(249, 115, 22, 0.35);
+  --accent-text: #c2410c; /* laranja escuro: legivel como texto em fundo claro */
+  --on-accent: #ffffff;
+  --secondary: #f97316;
 
   /* Estados */
-  --error: #cf3a2e;
-  --success: #2f8b58;
-  --info: #2f6aa8;
+  --error: #dc2626;
+  --success: #10b981;
+  --info: #2563eb;
 
-  /* Bordas */
-  --border: rgba(40, 32, 14, 0.1);
-  --border-strong: rgba(40, 32, 14, 0.2);
+  /* Bordas — zinc */
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
 
-  /* Elevacao — sombras quentes em niveis */
-  --elevation-1: 0 1px 2px rgba(38, 28, 8, 0.05), 0 1px 3px rgba(38, 28, 8, 0.06);
-  --elevation-2: 0 4px 14px rgba(38, 28, 8, 0.09), 0 2px 6px rgba(38, 28, 8, 0.06);
-  --elevation-3: 0 24px 56px rgba(28, 20, 6, 0.2), 0 8px 20px rgba(28, 20, 6, 0.1);
+  /* Elevacao — sombras marcadas (estilo shadow-lg / xl / 2xl) */
+  --elevation-1: 0 1px 2px rgba(24, 24, 27, 0.06), 0 1px 3px rgba(24, 24, 27, 0.1);
+  --elevation-2: 0 10px 15px -3px rgba(24, 24, 27, 0.1), 0 4px 6px -4px rgba(24, 24, 27, 0.1);
+  --elevation-3: 0 25px 50px -12px rgba(24, 24, 27, 0.25);
   /* Aliases dos nomes antigos — mantem o CSS de componentes funcionando. */
   --shadow-sm: var(--elevation-1);
   --shadow: var(--elevation-2);
   --shadow-lg: var(--elevation-3);
 
-  /* Raio */
-  --radius: 14px;
-  --radius-sm: 9px;
-  --radius-lg: 20px;
+  /* Raio — rounded-lg / xl / 2xl + pilula */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
   --content-max: 1180px;
 
-  /* Movimento — sistema codificado */
-  --motion-fast: 120ms;
-  --motion-base: 200ms;
-  --motion-slow: 340ms;
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* Movimento — 300ms / ease-out, como o design system */
+  --motion-fast: 150ms;
+  --motion-base: 300ms;
+  --motion-slow: 480ms;
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* Tipografia */
@@ -70,38 +72,38 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Tema escuro — grafite quente + dourado. Inerte ate a Fase 4 ligar o
+/* Tema escuro — zinc-950/900 + laranja claro. Inerte ate a Fase 4 ligar o
    atributo data-theme; os tokens ja ficam prontos aqui. */
 :root[data-theme='dark'] {
-  --background: #14120d;
-  --surface: #1e1b15;
-  --surface-2: #25211a;
-  --surface-sunken: #100e0a;
-  --sidebar-bg: rgba(20, 18, 13, 0.82);
+  --background: #09090b;
+  --surface: #18181b;
+  --surface-2: #27272a;
+  --surface-sunken: #000000;
+  --sidebar-bg: rgba(9, 9, 11, 0.82);
 
-  --primary: #f6f1e3;
-  --text: #e7e1d2;
-  --text-muted: #a39b86;
-  --text-soft: #756d5b;
+  --primary: #fafafa;
+  --text: #e4e4e7;
+  --text-muted: #a1a1aa;
+  --text-soft: #71717a;
 
-  --accent: #d8a942;
-  --accent-hover: #e6ba5b;
-  --accent-soft: rgba(216, 169, 66, 0.16);
-  --accent-ring: rgba(216, 169, 66, 0.42);
-  --accent-text: #e0b85c;
-  --on-accent: #1a160c;
-  --secondary: #d8a942;
+  --accent: #fb923c;
+  --accent-hover: #fdba74;
+  --accent-soft: rgba(251, 146, 60, 0.16);
+  --accent-ring: rgba(251, 146, 60, 0.4);
+  --accent-text: #fdba74;
+  --on-accent: #18181b;
+  --secondary: #fb923c;
 
-  --error: #ef6258;
-  --success: #4fae7c;
-  --info: #5b96d4;
+  --error: #f87171;
+  --success: #34d399;
+  --info: #60a5fa;
 
-  --border: rgba(247, 240, 222, 0.1);
-  --border-strong: rgba(247, 240, 222, 0.2);
+  --border: #27272a;
+  --border-strong: #3f3f46;
 
-  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --elevation-2: 0 6px 18px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
-  --elevation-3: 0 28px 60px rgba(0, 0, 0, 0.62), 0 10px 24px rgba(0, 0, 0, 0.5);
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.5);
+  --elevation-2: 0 10px 15px -3px rgba(0, 0, 0, 0.7), 0 4px 6px -4px rgba(0, 0, 0, 0.6);
+  --elevation-3: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
 
   color-scheme: dark;
 }
