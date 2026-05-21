@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -68,7 +68,6 @@ export function LeadsPage() {
   const [convertingLead, setConvertingLead] = useState<Lead>();
   const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT);
   const [convertSaving, setConvertSaving] = useState(false);
-  const convertFormRef = useRef<HTMLElement>(null);
 
   // Filtros do Kanban — controlam o que vai pra API.
   const [unitFilter, setUnitFilter] = useState('');
@@ -108,12 +107,18 @@ export function LeadsPage() {
     void load();
   }, [load]);
 
-  // O formulario de conversao fica no topo da pagina; ao abrir, rola ate ele —
-  // senao, com o Kanban rolado pra baixo, parece que "nada acontece" no clique.
+  // Modal de conversao: fecha no Esc e trava o scroll do fundo enquanto aberto.
   useEffect(() => {
-    if (convertingLead) {
-      convertFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!convertingLead) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setConvertingLead(undefined);
     }
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
   }, [convertingLead]);
 
   // Agrupa por etapa preservando a ordem definida em LEAD_STAGES.
@@ -250,63 +255,68 @@ export function LeadsPage() {
       {info && <p className="form-info">{info}</p>}
 
       {convertingLead && (
-        <section ref={convertFormRef} className="form-card">
-          <h2>Converter em aluno: {convertingLead.name}</h2>
-          <p className="muted-text">
-            O CPF e pedido so na matricula. O saldo de aulas vem da quantidade do pacote.
-          </p>
-          <form className="grid-form" onSubmit={handleConvert}>
-            <label>
-              CPF
-              <input
-                value={convertForm.cpf}
-                onChange={(event) => updateConvertField('cpf', event.target.value)}
-                inputMode="numeric"
-                required
-              />
-            </label>
-            <label>
-              Unidade
-              <select
-                value={convertForm.unitId}
-                onChange={(event) => updateConvertField('unitId', event.target.value)}
-                required
-              >
-                <option value="">Selecione</option>
-                {units.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Pacote
-              <select
-                value={convertForm.packageId}
-                onChange={(event) => updateConvertField('packageId', event.target.value)}
-                required
-              >
-                <option value="">Selecione</option>
-                {packages.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} ({item.classCount} aulas)
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="grid-form-actions">
-              <div className="row-actions">
-                <button type="submit" disabled={convertSaving}>
-                  {convertSaving ? 'Convertendo...' : 'Confirmar matricula'}
-                </button>
-                <button type="button" className="secondary-button" onClick={cancelConvert}>
-                  Cancelar
-                </button>
+        <div className="modal-overlay" onClick={cancelConvert}>
+          <section
+            className="form-card modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Converter em aluno: {convertingLead.name}</h2>
+            <p className="muted-text">
+              O CPF e pedido so na matricula. O saldo de aulas vem da quantidade do pacote.
+            </p>
+            <form className="grid-form" onSubmit={handleConvert}>
+              <label>
+                CPF
+                <input
+                  value={convertForm.cpf}
+                  onChange={(event) => updateConvertField('cpf', event.target.value)}
+                  inputMode="numeric"
+                  required
+                />
+              </label>
+              <label>
+                Unidade
+                <select
+                  value={convertForm.unitId}
+                  onChange={(event) => updateConvertField('unitId', event.target.value)}
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {units.map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Pacote
+                <select
+                  value={convertForm.packageId}
+                  onChange={(event) => updateConvertField('packageId', event.target.value)}
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {packages.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.classCount} aulas)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid-form-actions">
+                <div className="row-actions">
+                  <button type="submit" disabled={convertSaving}>
+                    {convertSaving ? 'Convertendo...' : 'Confirmar matricula'}
+                  </button>
+                  <button type="button" className="secondary-button" onClick={cancelConvert}>
+                    Cancelar
+                  </button>
+                </div>
               </div>
-            </div>
-          </form>
-        </section>
+            </form>
+          </section>
+        </div>
       )}
 
       <section className="form-card">
