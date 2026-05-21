@@ -1,39 +1,65 @@
 @import './fonts.css';
 
 :root {
-  /* Paleta inspirada no macOS: cinza claro de fundo, branco nas superficies,
-     azul Apple como acento interativo, dourado VOX em uso minimo. */
-  --background: #f5f5f7;
+  /* Identidade VOX: base creme quente, dourado como cor de acao, tinta quente.
+     Os componentes consomem os tokens por nome — trocar valores aqui re-veste
+     o app inteiro. Tema escuro abaixo, em :root[data-theme='dark']. */
+
+  /* Superficies */
+  --background: #f4f1e9;
   --surface: #ffffff;
-  --surface-2: #fbfbfd;
-  --surface-sunken: #ececed;
-  --sidebar-bg: rgba(255, 255, 255, 0.72);
+  --surface-2: #faf7f0;
+  --surface-sunken: #ebe6da;
+  --sidebar-bg: rgba(255, 255, 255, 0.78);
 
-  --primary: #1d1d1f;
-  --text: #1d1d1f;
-  --text-muted: #6e6e73;
-  --text-soft: #8e8e93;
+  /* Texto */
+  --primary: #1c1813;
+  --text: #2a2419;
+  --text-muted: #6c6453;
+  --text-soft: #9a917d;
 
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
-  --accent-soft: rgba(0, 113, 227, 0.1);
-  --accent-ring: rgba(0, 113, 227, 0.32);
+  /* Acento — dourado VOX */
+  --accent: #c2912a;
+  --accent-hover: #aa7d1d;
+  --accent-soft: rgba(194, 145, 42, 0.14);
+  --accent-ring: rgba(194, 145, 42, 0.4);
+  --accent-text: #8a6312; /* dourado escuro: legivel como texto em fundo claro */
+  --on-accent: #221d10; /* tinta escura: texto sobre superficie dourada */
+  --secondary: #c2912a;
 
-  --secondary: #c79a2e;
-  --error: #ff3b30;
+  /* Estados */
+  --error: #cf3a2e;
+  --success: #2f8b58;
+  --info: #2f6aa8;
 
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.16);
+  /* Bordas */
+  --border: rgba(40, 32, 14, 0.1);
+  --border-strong: rgba(40, 32, 14, 0.2);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.14), 0 6px 16px rgba(0, 0, 0, 0.06);
+  /* Elevacao — sombras quentes em niveis */
+  --elevation-1: 0 1px 2px rgba(38, 28, 8, 0.05), 0 1px 3px rgba(38, 28, 8, 0.06);
+  --elevation-2: 0 4px 14px rgba(38, 28, 8, 0.09), 0 2px 6px rgba(38, 28, 8, 0.06);
+  --elevation-3: 0 24px 56px rgba(28, 20, 6, 0.2), 0 8px 20px rgba(28, 20, 6, 0.1);
+  /* Aliases dos nomes antigos — mantem o CSS de componentes funcionando. */
+  --shadow-sm: var(--elevation-1);
+  --shadow: var(--elevation-2);
+  --shadow-lg: var(--elevation-3);
 
+  /* Raio */
   --radius: 14px;
   --radius-sm: 9px;
   --radius-lg: 20px;
   --content-max: 1180px;
 
+  /* Movimento — sistema codificado */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 340ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Tipografia */
   --font-body: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-heading: 'Hanken Grotesk', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 
@@ -42,6 +68,54 @@
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tema escuro — grafite quente + dourado. Inerte ate a Fase 4 ligar o
+   atributo data-theme; os tokens ja ficam prontos aqui. */
+:root[data-theme='dark'] {
+  --background: #14120d;
+  --surface: #1e1b15;
+  --surface-2: #25211a;
+  --surface-sunken: #100e0a;
+  --sidebar-bg: rgba(20, 18, 13, 0.82);
+
+  --primary: #f6f1e3;
+  --text: #e7e1d2;
+  --text-muted: #a39b86;
+  --text-soft: #756d5b;
+
+  --accent: #d8a942;
+  --accent-hover: #e6ba5b;
+  --accent-soft: rgba(216, 169, 66, 0.16);
+  --accent-ring: rgba(216, 169, 66, 0.42);
+  --accent-text: #e0b85c;
+  --on-accent: #1a160c;
+  --secondary: #d8a942;
+
+  --error: #ef6258;
+  --success: #4fae7c;
+  --info: #5b96d4;
+
+  --border: rgba(247, 240, 222, 0.1);
+  --border-strong: rgba(247, 240, 222, 0.2);
+
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --elevation-2: 0 6px 18px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --elevation-3: 0 28px 60px rgba(0, 0, 0, 0.62), 0 10px 24px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+/* Acessibilidade: respeita a preferencia de menos movimento do sistema. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {
@@ -70,7 +144,7 @@ button {
   background: var(--accent);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  color: #ffffff;
+  color: var(--on-accent);
   cursor: pointer;
   display: inline-flex;
   font-size: 0.9rem;
@@ -294,7 +368,7 @@ tbody tr:last-child td {
 
 .form-info {
   background: var(--accent-soft);
-  border: 1px solid rgba(0, 113, 227, 0.2);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   color: var(--text);
   line-break: anywhere;
@@ -316,7 +390,7 @@ tbody tr:last-child td {
 }
 
 .dev-link a {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
   width: max-content;
 }
@@ -334,7 +408,7 @@ tbody tr:last-child td {
 }
 
 .page-status a {
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* Portal do aluno */
@@ -581,7 +655,7 @@ tbody tr:last-child td {
 
 .app-nav a.active {
   background: var(--accent-soft);
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -703,7 +777,7 @@ tbody tr:last-child td {
 }
 
 .app-page a {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
@@ -990,7 +1064,7 @@ tr.row-selected {
 /* Telefone do lead como link para o WhatsApp (wa.me). */
 .kanban-card-whatsapp {
   align-self: flex-start;
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: none;
 }
 
@@ -1011,7 +1085,7 @@ tr.row-selected {
 }
 .class-confirmed::before {
   content: "✓";
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 /* Barra de filtros acima do Kanban — busca + select de unidade. */
@@ -1040,7 +1114,7 @@ tr.row-selected {
 .unit-tab[data-active='true'] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #ffffff;
+  color: var(--on-accent);
 }
 
 .unit-tab[data-active='true']:hover:not(:disabled) {
@@ -1108,7 +1182,7 @@ tr.row-selected {
   background: transparent;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   font-size: 0.8rem;
   padding: 0.2rem 0.7rem;
