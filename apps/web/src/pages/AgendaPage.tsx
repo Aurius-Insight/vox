@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { AppUser, ClassSession, Subject, Unit } from '../api/types';
 import { formatDateTime, isoToLocalInput, localInputToIso } from '../lib/format';
+import { Modal } from '../components/Modal';
 import { useToast } from '../components/ToastProvider';
 
 type ClassForm = {
@@ -56,6 +57,7 @@ export function AgendaPage() {
     teacherUserId: '',
   });
   const [editSaving, setEditSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -117,6 +119,7 @@ export function AgendaPage() {
         }),
       });
       setForm(EMPTY_FORM);
+      setShowForm(false);
       await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel criar a aula.');
@@ -128,6 +131,7 @@ export function AgendaPage() {
   function startEdit(classSession: ClassSession) {
     setError('');
     setInfo('');
+    setShowForm(true);
     setEditingClass(classSession);
     setEditForm({
       capacity: String(classSession.capacity),
@@ -137,9 +141,15 @@ export function AgendaPage() {
     });
   }
 
-  function cancelEdit() {
+  function openNew() {
     setEditingClass(undefined);
-    setError('');
+    setForm(EMPTY_FORM);
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingClass(undefined);
   }
 
   async function handleSaveEdit(event: FormEvent) {
@@ -163,7 +173,7 @@ export function AgendaPage() {
         method: 'PATCH',
         body: JSON.stringify(body),
       });
-      cancelEdit();
+      closeForm();
       await load();
       setInfo('Aula atualizada.');
     } catch (err) {
@@ -196,12 +206,21 @@ export function AgendaPage() {
           <p className="eyebrow">Coordenacao</p>
           <h1>Agenda operacional</h1>
         </div>
+        <div className="row-actions">
+          <button type="button" onClick={openNew}>
+            Nova aula
+          </button>
+        </div>
       </header>
 
-      {editingClass ? (
-        <section className="form-card">
-          <h2>Editar aula — {editingClass.displayName}</h2>
-          <p className="muted-text">
+      {showForm && (
+        <Modal
+          title={editingClass ? `Editar aula — ${editingClass.displayName}` : 'Nova aula'}
+          onClose={closeForm}
+        >
+          {editingClass ? (
+            <>
+              <p className="muted-text">
             Unidade ({editingClass.unitName ?? '-'}) e materia nao sao editaveis. Pra mudar,
             cancele esta aula e crie uma nova.
           </p>
@@ -257,17 +276,15 @@ export function AgendaPage() {
                 <button type="submit" disabled={editSaving}>
                   {editSaving ? 'Salvando...' : 'Salvar alteracoes'}
                 </button>
-                <button type="button" className="secondary-button" onClick={cancelEdit}>
+                <button type="button" className="secondary-button" onClick={closeForm}>
                   Cancelar edicao
                 </button>
               </div>
             </div>
           </form>
-        </section>
-      ) : (
-        <section className="form-card">
-          <h2>Nova aula</h2>
-          <form className="grid-form" onSubmit={handleSubmit}>
+            </>
+          ) : (
+            <form className="grid-form" onSubmit={handleSubmit}>
             <div className="role-options">
               <label>
                 <input
@@ -367,7 +384,8 @@ export function AgendaPage() {
               </button>
             </div>
           </form>
-        </section>
+          )}
+        </Modal>
       )}
 
       <section className="table-card">

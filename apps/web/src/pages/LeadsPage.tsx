@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/core';
 import { ApiClientError, api } from '../api/client';
 import { whatsappLink } from '../lib/format';
+import { Modal } from '../components/Modal';
 import { Skeleton } from '../components/Skeleton';
 import { useToast } from '../components/ToastProvider';
 import {
@@ -65,6 +66,7 @@ export function LeadsPage() {
   const [form, setForm] = useState<LeadForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
   const toast = useToast();
 
   const [convertingLead, setConvertingLead] = useState<Lead>();
@@ -163,6 +165,7 @@ export function LeadsPage() {
         }),
       });
       setForm(EMPTY_FORM);
+      setShowCreate(false);
       await load();
     } catch (err) {
       toast.error(
@@ -254,6 +257,11 @@ export function LeadsPage() {
           <p className="eyebrow">Vendas</p>
           <h1>Pipeline de atendimento</h1>
         </div>
+        <div className="row-actions">
+          <button type="button" onClick={() => setShowCreate(true)}>
+            Novo lead
+          </button>
+        </div>
       </header>
 
       {convertingLead && (
@@ -321,9 +329,9 @@ export function LeadsPage() {
         </div>
       )}
 
-      <section className="form-card">
-        <h2>Novo lead</h2>
-        <form className="grid-form" onSubmit={handleCreate}>
+      {showCreate && (
+        <Modal title="Novo lead" onClose={() => setShowCreate(false)}>
+          <form className="grid-form" onSubmit={handleCreate}>
           <label>
             Nome
             <input
@@ -369,7 +377,8 @@ export function LeadsPage() {
             </button>
           </div>
         </form>
-      </section>
+        </Modal>
+      )}
 
       <UnitTabs units={units} active={unitFilter} onSelect={setUnitFilter} />
 

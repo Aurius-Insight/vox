@@ -10,6 +10,7 @@ import {
   type Unit,
 } from '../api/types';
 import { formatCents, formatDate, parseReaisToCents } from '../lib/format';
+import { Modal } from '../components/Modal';
 import { useToast } from '../components/ToastProvider';
 
 type PackageForm = {
@@ -55,6 +56,8 @@ export function ConfiguracoesPage() {
   const [pendingUserId, setPendingUserId] = useState<string>();
   const [pendingPackageId, setPendingPackageId] = useState<string>();
   const [editingPackageId, setEditingPackageId] = useState<string>();
+  const [showPackageForm, setShowPackageForm] = useState(false);
+  const [showUserForm, setShowUserForm] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -99,6 +102,7 @@ export function ConfiguracoesPage() {
 
   function startEditPackage(pkg: Package) {
     setError('');
+    setShowPackageForm(true);
     setEditingPackageId(pkg.id);
     setPackageForm({
       name: pkg.name,
@@ -112,6 +116,16 @@ export function ConfiguracoesPage() {
   function cancelEditPackage() {
     setEditingPackageId(undefined);
     setPackageForm(EMPTY_PACKAGE);
+  }
+
+  function openNewPackage() {
+    cancelEditPackage();
+    setShowPackageForm(true);
+  }
+
+  function closePackageForm() {
+    setShowPackageForm(false);
+    cancelEditPackage();
   }
 
   async function handleSubmitPackage(event: FormEvent) {
@@ -135,7 +149,7 @@ export function ConfiguracoesPage() {
       } else {
         await api<{ data: Package }>('/api/packages', { method: 'POST', body });
       }
-      cancelEditPackage();
+      closePackageForm();
       await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar o pacote.');
@@ -192,6 +206,7 @@ export function ConfiguracoesPage() {
         }),
       });
       setUserForm(EMPTY_USER);
+      setShowUserForm(false);
       await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel criar o usuario.');
@@ -245,11 +260,22 @@ export function ConfiguracoesPage() {
           <p className="eyebrow">Configuracoes</p>
           <h1>Administracao</h1>
         </div>
+        <div className="row-actions">
+          <button type="button" className="secondary-button" onClick={openNewPackage}>
+            Novo pacote
+          </button>
+          <button type="button" onClick={() => setShowUserForm(true)}>
+            Novo usuario
+          </button>
+        </div>
       </header>
 
-      <section className="form-card">
-        <h2>{editingPackageId ? 'Editar pacote' : 'Novo pacote'}</h2>
-        <p className="muted-text">
+      {showPackageForm && (
+        <Modal
+          title={editingPackageId ? 'Editar pacote' : 'Novo pacote'}
+          onClose={closePackageForm}
+        >
+          <p className="muted-text">
           {editingPackageId
             ? 'As alteracoes sobrescrevem o pacote atual, inclusive preco e quantidade de aulas.'
             : 'Cadastre um pacote do catalogo. O preco passa a vigorar a partir de hoje.'}
@@ -303,15 +329,14 @@ export function ConfiguracoesPage() {
                     ? 'Salvar alteracoes'
                     : 'Criar pacote'}
               </button>
-              {editingPackageId && (
-                <button type="button" className="secondary-button" onClick={cancelEditPackage}>
-                  Cancelar
-                </button>
-              )}
+              <button type="button" className="secondary-button" onClick={closePackageForm}>
+                Cancelar
+              </button>
             </div>
           </div>
         </form>
-      </section>
+        </Modal>
+      )}
 
       <section className="table-card">
         <div className="table-card-header">
@@ -383,9 +408,9 @@ export function ConfiguracoesPage() {
         </table>
       </section>
 
-      <section className="form-card">
-        <h2>Novo usuario</h2>
-        <p className="muted-text">
+      {showUserForm && (
+        <Modal title="Novo usuario" onClose={() => setShowUserForm(false)}>
+          <p className="muted-text">
           Defina a senha inicial e repasse ao usuario. Use os papeis para liberar o acesso de cada
           area (professor enxerga apenas as proprias aulas).
         </p>
@@ -466,7 +491,8 @@ export function ConfiguracoesPage() {
             </button>
           </div>
         </form>
-      </section>
+        </Modal>
+      )}
 
       <section className="table-card">
         <div className="table-card-header">
