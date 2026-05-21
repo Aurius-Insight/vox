@@ -14,11 +14,15 @@ const CreatePackageSchema = z.object({
   validityDays: z.number().int().min(0).max(3650),
 });
 
-// Preco/quantidade nao sao editaveis: alterar isso significa criar um pacote
-// novo. O PATCH so renomeia e ativa/desativa.
+// O PATCH edita o pacote no lugar: nome, quantidade de aulas, preco, validade
+// e status. Editar o preco aqui sobrescreve o registro — para preservar o
+// historico de precos, cria-se um pacote novo via POST.
 const UpdatePackageSchema = z
   .object({
     name: z.string().min(2).max(120).optional(),
+    classCount: z.number().int().min(1).max(1000).optional(),
+    priceCents: z.number().int().min(0).max(100_000_000).optional(),
+    validityDays: z.number().int().min(0).max(3650).optional(),
     active: z.boolean().optional(),
   })
   .refine((data) => Object.values(data).some((value) => value !== undefined), {
@@ -74,6 +78,9 @@ router.patch(
 
     const data: Prisma.PackageUpdateInput = {};
     if (input.name !== undefined) data.name = input.name;
+    if (input.classCount !== undefined) data.classCount = input.classCount;
+    if (input.priceCents !== undefined) data.priceCents = input.priceCents;
+    if (input.validityDays !== undefined) data.validityDays = input.validityDays;
     if (input.active !== undefined) data.active = input.active;
 
     const updated = await prisma.package.update({
@@ -94,6 +101,34 @@ router.patch(
     });
 
     res.json({ data: updated });
+  }),
+);
+
+// Exclusao definitiva. A pedido do produto, qualquer pacote pode ser apagado —
+// inclusive os ja usados por alunos (Student guarda o nome do pacote como texto,
+// entao nao ha quebra de integridade). O auditLog preserva o registro removido.
+router.delete(
+  '/:packageId',
+  requireAuth,
+  requireRole('diretor'),
+  asyncHandler(async (req, res) => {
+    const before = await prisma.package.findUnique({ where: { id: req.params.packageId } });
+    if (!before) throw new ApiError(404, 'package_not_found', 'Pacote nao encontrado.');
+
+    await prisma.package.delete({ where: { id: req.params.packageId } });
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: req.user!.id,
+        actorType: 'user',
+        entityType: 'package',
+        entityId: before.id,
+        action: 'package.deleted',
+        before,
+      },
+    });
+
+    res.json({ data: { id: before.id } });
   }),
 );
 

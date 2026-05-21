@@ -49,6 +49,7 @@ export function ConfiguracoesPage() {
   const [savingUser, setSavingUser] = useState(false);
   const [pendingUserId, setPendingUserId] = useState<string>();
   const [pendingPackageId, setPendingPackageId] = useState<string>();
+  const [editingPackageId, setEditingPackageId] = useState<string>();
 
   const load = useCallback(async () => {
     try {
@@ -91,27 +92,69 @@ export function ConfiguracoesPage() {
     }));
   }
 
-  async function handleCreatePackage(event: FormEvent) {
+  function startEditPackage(pkg: Package) {
+    setError('');
+    setEditingPackageId(pkg.id);
+    setPackageForm({
+      name: pkg.name,
+      classCount: String(pkg.classCount),
+      // priceCents -> reais com virgula decimal (formato que parseReaisToCents espera).
+      price: (pkg.priceCents / 100).toFixed(2).replace('.', ','),
+      validityDays: String(pkg.validityDays),
+    });
+  }
+
+  function cancelEditPackage() {
+    setEditingPackageId(undefined);
+    setPackageForm(EMPTY_PACKAGE);
+  }
+
+  async function handleSubmitPackage(event: FormEvent) {
     event.preventDefault();
     setError('');
     setSavingPackage(true);
 
+    const body = JSON.stringify({
+      name: packageForm.name,
+      classCount: Number(packageForm.classCount),
+      priceCents: parseReaisToCents(packageForm.price),
+      validityDays: Number(packageForm.validityDays),
+    });
+
     try {
-      await api<{ data: Package }>('/api/packages', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: packageForm.name,
-          classCount: Number(packageForm.classCount),
-          priceCents: parseReaisToCents(packageForm.price),
-          validityDays: Number(packageForm.validityDays),
-        }),
-      });
-      setPackageForm(EMPTY_PACKAGE);
+      if (editingPackageId) {
+        await api<{ data: Package }>(`/api/packages/${editingPackageId}`, {
+          method: 'PATCH',
+          body,
+        });
+      } else {
+        await api<{ data: Package }>('/api/packages', { method: 'POST', body });
+      }
+      cancelEditPackage();
       await load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel criar o pacote.');
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar o pacote.');
     } finally {
       setSavingPackage(false);
+    }
+  }
+
+  async function handleDeletePackage(pkg: Package) {
+    const proceed = window.confirm(
+      `Excluir o pacote "${pkg.name}" definitivamente? Esta acao nao pode ser desfeita.`,
+    );
+    if (!proceed) return;
+    setPendingPackageId(pkg.id);
+    setError('');
+
+    try {
+      await api(`/api/packages/${pkg.id}`, { method: 'DELETE' });
+      setPackages((current) => current.filter((item) => item.id !== pkg.id));
+      if (editingPackageId === pkg.id) cancelEditPackage();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel excluir o pacote.');
+    } finally {
+      setPendingPackageId(undefined);
     }
   }
 
@@ -202,12 +245,13 @@ export function ConfiguracoesPage() {
       {error && <p className="form-error">{error}</p>}
 
       <section className="form-card">
-        <h2>Novo pacote</h2>
+        <h2>{editingPackageId ? 'Editar pacote' : 'Novo pacote'}</h2>
         <p className="muted-text">
-          Alteracao de preco cria um novo pacote vigente a partir de hoje. O historico anterior
-          nao e reescrito.
+          {editingPackageId
+            ? 'As alteracoes sobrescrevem o pacote atual, inclusive preco e quantidade de aulas.'
+            : 'Cadastre um pacote do catalogo. O preco passa a vigorar a partir de hoje.'}
         </p>
-        <form className="grid-form" onSubmit={handleCreatePackage}>
+        <form className="grid-form" onSubmit={handleSubmitPackage}>
           <label>
             Nome
             <input
@@ -248,9 +292,20 @@ export function ConfiguracoesPage() {
             />
           </label>
           <div className="grid-form-actions">
-            <button type="submit" disabled={savingPackage}>
-              {savingPackage ? 'Salvando...' : 'Criar pacote'}
-            </button>
+            <div className="row-actions">
+              <button type="submit" disabled={savingPackage}>
+                {savingPackage
+                  ? 'Salvando...'
+                  : editingPackageId
+                    ? 'Salvar alteracoes'
+                    : 'Criar pacote'}
+              </button>
+              {editingPackageId && (
+                <button type="button" className="secondary-button" onClick={cancelEditPackage}>
+                  Cancelar
+                </button>
+              )}
+            </div>
           </div>
         </form>
       </section>
@@ -289,18 +344,35 @@ export function ConfiguracoesPage() {
                 <td>{formatDate(item.effectiveFrom)}</td>
                 <td>{item.active ? 'ativo' : 'inativo'}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={pendingPackageId === item.id}
-                    onClick={() => void handleTogglePackage(item)}
-                  >
-                    {pendingPackageId === item.id
-                      ? 'Salvando...'
-                      : item.active
-                        ? 'Desativar'
-                        : 'Ativar'}
-                  </button>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => startEditPackage(item)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={pendingPackageId === item.id}
+                      onClick={() => void handleTogglePackage(item)}
+                    >
+                      {pendingPackageId === item.id
+                        ? 'Salvando...'
+                        : item.active
+                          ? 'Desativar'
+                          : 'Ativar'}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button danger-button"
+                      disabled={pendingPackageId === item.id}
+                      onClick={() => void handleDeletePackage(item)}
+                    >
+                      Excluir
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
