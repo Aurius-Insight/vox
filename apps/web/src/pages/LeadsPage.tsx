@@ -10,6 +10,8 @@ import {
 } from '@dnd-kit/core';
 import { ApiClientError, api } from '../api/client';
 import { whatsappLink } from '../lib/format';
+import { Skeleton } from '../components/Skeleton';
+import { useToast } from '../components/ToastProvider';
 import {
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
@@ -61,9 +63,9 @@ export function LeadsPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [form, setForm] = useState<LeadForm>(EMPTY_FORM);
-  const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   const [convertingLead, setConvertingLead] = useState<Lead>();
   const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT);
@@ -99,9 +101,11 @@ export function LeadsPage() {
       setPackages(packageList.data.filter((item) => item.active));
       setUnits(unitList.data.filter((item) => item.active));
     } catch {
-      setError('Nao foi possivel carregar os leads.');
+      toast.error('Nao foi possivel carregar os leads.');
+    } finally {
+      setLoading(false);
     }
-  }, [unitFilter, search]);
+  }, [unitFilter, search, toast]);
 
   useEffect(() => {
     void load();
@@ -145,7 +149,6 @@ export function LeadsPage() {
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    setError('');
     setSaving(true);
 
     try {
@@ -162,7 +165,9 @@ export function LeadsPage() {
       setForm(EMPTY_FORM);
       await load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel criar o lead.');
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel criar o lead.',
+      );
     } finally {
       setSaving(false);
     }
@@ -173,7 +178,6 @@ export function LeadsPage() {
    * otimista (move ja na UI) e dispara o PATCH. Em caso de erro, reverte.
    */
   async function handleDragEnd(event: DragEndEvent) {
-    setError('');
     const { active, over } = event;
     if (!over) return;
     const leadId = String(active.id);
@@ -200,13 +204,13 @@ export function LeadsPage() {
           item.id === leadId ? { ...item, stage: previousStage } : item,
         ),
       );
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel mover o lead.');
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel mover o lead.',
+      );
     }
   }
 
   function startConvert(lead: Lead) {
-    setError('');
-    setInfo('');
     setConvertingLead(lead);
     setConvertForm(EMPTY_CONVERT);
   }
@@ -218,7 +222,6 @@ export function LeadsPage() {
   async function handleConvert(event: FormEvent) {
     event.preventDefault();
     if (!convertingLead) return;
-    setError('');
     setConvertSaving(true);
 
     try {
@@ -230,13 +233,15 @@ export function LeadsPage() {
           packageId: convertForm.packageId,
         }),
       });
-      setInfo(
+      toast.success(
         `${response.data.student.name} convertido em aluno. Matricula ${response.data.student.enrollmentCode} - ${response.data.student.packageName}.`,
       );
       setConvertingLead(undefined);
       await load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel converter o lead.');
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel converter o lead.',
+      );
     } finally {
       setConvertSaving(false);
     }
@@ -250,9 +255,6 @@ export function LeadsPage() {
           <h1>Pipeline de atendimento</h1>
         </div>
       </header>
-
-      {error && <p className="form-error">{error}</p>}
-      {info && <p className="form-info">{info}</p>}
 
       {convertingLead && (
         <div className="modal-overlay" onClick={cancelConvert}>
@@ -398,18 +400,35 @@ export function LeadsPage() {
         </span>
       </section>
 
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <section className="kanban-board" aria-label="Pipeline de leads">
+      {loading ? (
+        <section className="kanban-board" aria-hidden="true">
           {LEAD_STAGES.map((stage) => (
-            <KanbanColumn
-              key={stage}
-              stage={stage}
-              leads={leadsByStage[stage]}
-              onConvertLead={startConvert}
-            />
+            <div key={stage} className="kanban-column">
+              <header className="kanban-column-header">
+                <Skeleton width="100px" height="0.85rem" />
+              </header>
+              <div className="kanban-column-body">
+                <Skeleton height="96px" radius="10px" />
+                <Skeleton height="96px" radius="10px" />
+                <Skeleton height="96px" radius="10px" />
+              </div>
+            </div>
           ))}
         </section>
-      </DndContext>
+      ) : (
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          <section className="kanban-board" aria-label="Pipeline de leads">
+            {LEAD_STAGES.map((stage) => (
+              <KanbanColumn
+                key={stage}
+                stage={stage}
+                leads={leadsByStage[stage]}
+                onConvertLead={startConvert}
+              />
+            ))}
+          </section>
+        </DndContext>
+      )}
     </main>
   );
 }
