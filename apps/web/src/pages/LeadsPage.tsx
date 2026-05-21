@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -68,6 +68,7 @@ export function LeadsPage() {
   const [convertingLead, setConvertingLead] = useState<Lead>();
   const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT);
   const [convertSaving, setConvertSaving] = useState(false);
+  const convertFormRef = useRef<HTMLElement>(null);
 
   // Filtros do Kanban — controlam o que vai pra API.
   const [unitFilter, setUnitFilter] = useState('');
@@ -106,6 +107,14 @@ export function LeadsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // O formulario de conversao fica no topo da pagina; ao abrir, rola ate ele —
+  // senao, com o Kanban rolado pra baixo, parece que "nada acontece" no clique.
+  useEffect(() => {
+    if (convertingLead) {
+      convertFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [convertingLead]);
 
   // Agrupa por etapa preservando a ordem definida em LEAD_STAGES.
   const leadsByStage = useMemo(() => {
@@ -241,7 +250,7 @@ export function LeadsPage() {
       {info && <p className="form-info">{info}</p>}
 
       {convertingLead && (
-        <section className="form-card">
+        <section ref={convertFormRef} className="form-card">
           <h2>Converter em aluno: {convertingLead.name}</h2>
           <p className="muted-text">
             O CPF e pedido so na matricula. O saldo de aulas vem da quantidade do pacote.
