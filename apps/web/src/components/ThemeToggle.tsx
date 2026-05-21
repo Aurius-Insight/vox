@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Moon, Sun } from 'lucide-react';
 
 type Theme = 'light' | 'dark';
 
@@ -23,15 +24,18 @@ export function ThemeToggle() {
   }, [theme]);
 
   const isDark = theme === 'dark';
+  const label = isDark ? 'Tema claro' : 'Tema escuro';
 
   return (
     <button
       type="button"
-      className="secondary-button"
+      className="secondary-button sidebar-action"
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      aria-label={isDark ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+      title={label}
+      aria-label={label}
     >
-      {isDark ? '☀ Tema claro' : '☾ Tema escuro'}
+      {isDark ? <Sun size={16} /> : <Moon size={16} />}
+      <span className="sidebar-label">{label}</span>
     </button>
   );
 }

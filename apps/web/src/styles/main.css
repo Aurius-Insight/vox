@@ -621,6 +621,74 @@ tbody tr:last-child td {
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns var(--motion-base) var(--ease-out);
+}
+
+.app-shell[data-collapsed='true'] {
+  grid-template-columns: 68px minmax(0, 1fr);
+}
+
+/* Sidebar — topo com marca + botao de retrair */
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sidebar-toggle {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  color: var(--text-muted);
+  min-height: auto;
+  padding: 0.4rem;
+}
+
+.sidebar-toggle:hover:not(:disabled) {
+  background: var(--surface-2);
+  box-shadow: none;
+  color: var(--text);
+  transform: none;
+}
+
+.nav-icon {
+  flex-shrink: 0;
+}
+
+.sidebar-action {
+  gap: 0.5rem;
+}
+
+/* Estado retraido — esconde textos e centraliza os icones */
+.app-shell[data-collapsed='true'] .sidebar-label {
+  display: none;
+}
+
+.app-shell[data-collapsed='true'] .brand {
+  display: none;
+}
+
+.app-shell[data-collapsed='true'] .sidebar-top {
+  justify-content: center;
+}
+
+.app-shell[data-collapsed='true'] .app-sidebar {
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+}
+
+.app-shell[data-collapsed='true'] .app-user {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.app-shell[data-collapsed='true'] .app-nav a,
+.app-shell[data-collapsed='true'] .sidebar-action {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .app-sidebar {
@@ -666,10 +734,13 @@ tbody tr:last-child td {
 }
 
 .app-nav a {
+  align-items: center;
   border-radius: var(--radius-sm);
   color: var(--text-muted);
+  display: flex;
   font-size: 0.9rem;
   font-weight: 500;
+  gap: 0.7rem;
   padding: 0.55rem 0.7rem;
   text-decoration: none;
   transition: background-color 130ms ease, color 130ms ease;
