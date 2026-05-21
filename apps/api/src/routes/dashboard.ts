@@ -22,9 +22,10 @@ router.get(
     const query = QuerySchema.parse(req.query);
     const unitId = query.unitId && query.unitId !== 'todas' ? query.unitId : undefined;
 
-    // O filtro por unidade vale para os dados operacionais (aulas, alunos,
-    // presenca). Leads ficam fora do filtro: `Lead.unitInterest` e texto livre
-    // capturado da conversa, nao um vinculo formal com `Unit`.
+    // Filtro por unidade. Dados operacionais (aulas, alunos, presenca) usam o
+    // unitId. Leads nao tem FK para Unit — so o campo de texto livre
+    // `unitInterest` — entao filtram por match exato do nome (leadWhere abaixo),
+    // igual a aba por unidade da pagina de Vendas.
     const classWhere = unitId ? { unitId } : {};
     const studentWhere = unitId ? { active: true, unitId } : { active: true };
     const classRelationFilter = unitId ? { classSession: { unitId } } : {};
@@ -39,6 +40,12 @@ router.get(
       orderBy: { name: 'asc' },
       select: { id: true, name: true },
     });
+
+    // Leads filtram pelo nome da unidade (texto livre em `unitInterest`).
+    const selectedUnit = unitId
+      ? availableUnits.find((unit) => unit.id === unitId)
+      : undefined;
+    const leadWhere = selectedUnit ? { unitInterest: selectedUnit.name } : {};
 
     const [
       totalLeads,
@@ -55,12 +62,12 @@ router.get(
       presentCount,
       noShowCount,
     ] = await Promise.all([
-      prisma.lead.count(),
-      prisma.lead.count({ where: { stage: 'matriculado' } }),
-      prisma.lead.groupBy({ by: ['stage'], _count: true }),
+      prisma.lead.count({ where: leadWhere }),
+      prisma.lead.count({ where: { stage: 'matriculado', ...leadWhere } }),
+      prisma.lead.groupBy({ by: ['stage'], where: leadWhere, _count: true }),
       prisma.lead.groupBy({
         by: ['campaign'],
-        where: { campaign: { not: null } },
+        where: { campaign: { not: null }, ...leadWhere },
         _count: true,
       }),
       prisma.classSession.aggregate({ where: classWhere, _sum: { capacity: true } }),
