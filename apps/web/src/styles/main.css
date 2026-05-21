@@ -145,24 +145,31 @@ button {
   align-items: center;
   background: var(--accent);
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--elevation-2);
   color: var(--on-accent);
   cursor: pointer;
   display: inline-flex;
   font-size: 0.9rem;
   font-weight: 600;
   justify-content: center;
-  min-height: 40px;
-  padding: 0.6rem 1.1rem;
-  transition: background-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  min-height: 42px;
+  padding: 0.62rem 1.4rem;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 button:hover:not(:disabled) {
   background: var(--accent-hover);
+  box-shadow: var(--elevation-3);
+  transform: translateY(-1px);
 }
 
 button:active:not(:disabled) {
-  opacity: 0.85;
+  box-shadow: var(--elevation-1);
+  transform: translateY(0);
 }
 
 button:focus-visible {
@@ -173,30 +180,36 @@ button:focus-visible {
 button:disabled {
   background: var(--surface-sunken);
   border-color: transparent;
+  box-shadow: none;
   color: var(--text-soft);
   cursor: not-allowed;
 }
 
 .secondary-button {
-  background: rgba(0, 0, 0, 0.05);
-  border-color: transparent;
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: var(--elevation-1);
   color: var(--text);
 }
 
 .secondary-button:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.09);
+  background: var(--surface-2);
+  box-shadow: var(--elevation-2);
 }
 
 input,
 select {
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-1);
   color: var(--text);
-  min-height: 42px;
-  padding: 0.62rem 0.85rem;
+  min-height: 44px;
+  padding: 0.66rem 0.9rem;
   width: 100%;
-  transition: border-color 130ms ease, box-shadow 130ms ease;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 input:focus,
@@ -1103,6 +1116,7 @@ tr.row-selected {
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 999px;
+  box-shadow: none;
   color: var(--text-muted);
   font-size: 0.85rem;
   min-height: 34px;
@@ -1124,6 +1138,26 @@ tr.row-selected {
 }
 
 /* Modal (pop-up) — usado pelo formulario de conversao de lead. */
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1133,6 +1167,7 @@ tr.row-selected {
   justify-content: center;
   padding: 1.5rem;
   background: rgba(0, 0, 0, 0.45);
+  animation: modal-overlay-in var(--motion-base) var(--ease-out);
 }
 
 .modal-card {
@@ -1140,6 +1175,7 @@ tr.row-selected {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  animation: modal-card-in var(--motion-base) var(--ease-out);
 }
 
 .filters-bar {
@@ -1184,6 +1220,7 @@ tr.row-selected {
   background: transparent;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
+  box-shadow: none;
   color: var(--accent-text);
   cursor: pointer;
   font-size: 0.8rem;
