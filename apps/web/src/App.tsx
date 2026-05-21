@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
 import { Layout } from './components/Layout';
+import { ToastProvider } from './components/ToastProvider';
 import { firstAccessibleRoute } from './lib/navigation';
 import { AgendaPage } from './pages/AgendaPage';
 import { AlunosPage } from './pages/AlunosPage';
@@ -33,7 +34,8 @@ function HomeRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <ToastProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<HomeRedirect />} />
           <Route path="/login" element={<LoginPage />} />
@@ -76,7 +78,8 @@ export default function App() {
             </Route>
           </Route>
         </Routes>
-      </BrowserRouter>
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }
