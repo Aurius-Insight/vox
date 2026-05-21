@@ -370,6 +370,18 @@ tbody tr:last-child td {
   overflow: hidden;
 }
 
+/* Cartao de grafico — usado no Dashboard. */
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.chart-body {
+  padding: 0.35rem 1rem 1rem;
+}
+
 .table-card table {
   background: var(--surface);
 }
