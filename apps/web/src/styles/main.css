@@ -1190,6 +1190,29 @@ tr.row-selected {
   animation: modal-card-in var(--motion-base) var(--ease-out);
 }
 
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  min-height: auto;
+  padding: 0.2rem 0.45rem;
+}
+
+.modal-close:hover:not(:disabled) {
+  background: var(--surface-2);
+  box-shadow: none;
+  transform: none;
+}
+
 /* Toasts — pilha fixa no canto superior direito. */
 .toast-stack {
   position: fixed;

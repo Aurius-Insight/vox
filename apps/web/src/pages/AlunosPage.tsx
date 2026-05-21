@@ -3,6 +3,7 @@ import { ApiClientError, api } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import type { Lead, Package, StudentDetail, StudentSummary, Unit } from '../api/types';
 import { formatDate, formatDateTime } from '../lib/format';
+import { Modal } from '../components/Modal';
 import { useToast } from '../components/ToastProvider';
 
 type StudentForm = {
@@ -67,6 +68,8 @@ export function AlunosPage() {
   };
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -270,6 +273,7 @@ export function AlunosPage() {
       const { name, enrollmentCode, packageName } = response.data.student;
       setInfo(`${name} matriculado a partir do lead. Matricula ${enrollmentCode} - ${packageName}.`);
       setConvertLead(undefined);
+      setShowConvert(false);
       setConvertForm({ cpf: '', unitId: '', packageId: '' });
       setLeadSearch('');
       setLeadResults([]);
@@ -304,6 +308,7 @@ export function AlunosPage() {
       );
       setInfo(`${response.data.name} cadastrado. Matricula ${response.data.enrollmentCode}.`);
       setForm(EMPTY_FORM);
+      setShowCreate(false);
       await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel cadastrar o aluno.');
@@ -319,11 +324,26 @@ export function AlunosPage() {
           <p className="eyebrow">Alunos</p>
           <h1>Perfil do aluno</h1>
         </div>
+        <div className="row-actions">
+          {canOperate && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setShowConvert(true)}
+            >
+              Converter lead
+            </button>
+          )}
+          {canCreate && (
+            <button type="button" onClick={() => setShowCreate(true)}>
+              Cadastrar aluno
+            </button>
+          )}
+        </div>
       </header>
 
-      {canCreate && (
-        <section className="form-card">
-          <h2>Novo aluno</h2>
+      {canCreate && showCreate && (
+        <Modal title="Novo aluno" onClose={() => setShowCreate(false)}>
           <p className="muted-text">
             Cadastro avulso (sem lead). O saldo de aulas vem da quantidade do pacote.
           </p>
@@ -397,12 +417,11 @@ export function AlunosPage() {
               </button>
             </div>
           </form>
-        </section>
+        </Modal>
       )}
 
-      {canOperate && (
-        <section className="form-card">
-          <h2>Converter lead em aluno</h2>
+      {canOperate && showConvert && (
+        <Modal title="Converter lead em aluno" onClose={() => setShowConvert(false)}>
           <p className="muted-text">
             Busca um contato do pipeline de Vendas e matricula. Mantem o vinculo com o
             lead (origem/campanha) e move ele para "matriculado".
@@ -502,7 +521,7 @@ export function AlunosPage() {
               </form>
             </div>
           )}
-        </section>
+        </Modal>
       )}
 
       <div className="split-grid">
