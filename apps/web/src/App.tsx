@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { MotionConfig } from 'motion/react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
@@ -39,8 +40,9 @@ function HomeRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <ToastProvider>
-        <BrowserRouter>
+      <MotionConfig reducedMotion="user">
+        <ToastProvider>
+          <BrowserRouter>
         <Routes>
           <Route path="/" element={<HomeRedirect />} />
           <Route path="/login" element={<LoginPage />} />
@@ -92,8 +94,9 @@ export default function App() {
             </Route>
           </Route>
         </Routes>
-        </BrowserRouter>
-      </ToastProvider>
+          </BrowserRouter>
+        </ToastProvider>
+      </MotionConfig>
     </AuthProvider>
   );
 }
