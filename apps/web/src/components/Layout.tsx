@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { navItemsForRoles } from '../lib/navigation';
+import { ThemeToggle } from './ThemeToggle';
 
 export function Layout() {
   const auth = useAuth();
@@ -33,6 +34,7 @@ export function Layout() {
             <strong>{auth.user?.name ?? 'Usuario'}</strong>
             <span>{roles.join(', ') || 'sem papel'}</span>
           </div>
+          <ThemeToggle />
           <button type="button" className="secondary-button" onClick={() => void auth.logout()}>
             Sair
           </button>
