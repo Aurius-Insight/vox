@@ -3,6 +3,7 @@ import { ApiClientError, api } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import type { Lead, Package, StudentDetail, StudentSummary, Unit } from '../api/types';
 import { formatDate, formatDateTime } from '../lib/format';
+import { useToast } from '../components/ToastProvider';
 
 type StudentForm = {
   name: string;
@@ -56,8 +57,14 @@ export function AlunosPage() {
   const [convertForm, setConvertForm] = useState({ cpf: '', unitId: '', packageId: '' });
   const [convertSaving, setConvertSaving] = useState(false);
   const [linkPendingId, setLinkPendingId] = useState<string>();
-  const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
+  const toast = useToast();
+  // setError/setInfo encaminham para o sistema de toasts (mensagem vazia = no-op).
+  const setError = (message: string) => {
+    if (message) toast.error(message);
+  };
+  const setInfo = (message: string) => {
+    if (message) toast.success(message);
+  };
   const [saving, setSaving] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -313,9 +320,6 @@ export function AlunosPage() {
           <h1>Perfil do aluno</h1>
         </div>
       </header>
-
-      {error && <p className="form-error">{error}</p>}
-      {info && <p className="form-info">{info}</p>}
 
       {canCreate && (
         <section className="form-card">

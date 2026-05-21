@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { AppUser, ClassSession, Subject, Unit } from '../api/types';
 import { formatDateTime, isoToLocalInput, localInputToIso } from '../lib/format';
+import { useToast } from '../components/ToastProvider';
 
 type ClassForm = {
   isGuest: boolean;
@@ -36,8 +37,14 @@ export function AgendaPage() {
   const [teachers, setTeachers] = useState<AppUser[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [form, setForm] = useState<ClassForm>(EMPTY_FORM);
-  const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
+  const toast = useToast();
+  // setError/setInfo encaminham para o sistema de toasts (mensagem vazia = no-op).
+  const setError = (message: string) => {
+    if (message) toast.error(message);
+  };
+  const setInfo = (message: string) => {
+    if (message) toast.success(message);
+  };
   const [saving, setSaving] = useState(false);
 
   // Edicao inline: quando setado, esconde o "Nova aula" e mostra "Editar aula".
@@ -190,9 +197,6 @@ export function AgendaPage() {
           <h1>Agenda operacional</h1>
         </div>
       </header>
-
-      {error && <p className="form-error">{error}</p>}
-      {info && <p className="form-info">{info}</p>}
 
       {editingClass ? (
         <section className="form-card">
