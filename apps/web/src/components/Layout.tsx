@@ -1,10 +1,12 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { useAuth } from '../auth/AuthProvider';
 import { navItemsForRoles } from '../lib/navigation';
 import { ThemeToggle } from './ThemeToggle';
 
 export function Layout() {
   const auth = useAuth();
+  const location = useLocation();
   const roles = auth.user?.roles ?? [];
   const items = navItemsForRoles(roles);
 
@@ -42,7 +44,17 @@ export function Layout() {
       </aside>
 
       <div className="app-main">
-        <Outlet />
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease: [0, 0, 0.2, 1] }}
+          >
+            <Outlet />
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

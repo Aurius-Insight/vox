@@ -600,7 +600,7 @@ tbody tr:last-child td {
 }
 
 .status-chip {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--surface-2);
   border-radius: 999px;
   color: var(--text-muted);
   display: inline-flex;
@@ -676,7 +676,7 @@ tbody tr:last-child td {
 }
 
 .app-nav a:hover {
-  background: rgba(0, 0, 0, 0.045);
+  background: var(--surface-2);
   color: var(--text);
 }
 
