@@ -70,7 +70,6 @@ async function ensureUnits() {
         id,
         name,
         address: `${name}, Rio de Janeiro`,
-        rooms: 1,
         capacity: 12,
         active: true,
       },

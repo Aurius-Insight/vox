@@ -17,7 +17,6 @@ const AttendanceSchema = z.object({
 
 const UpdateClassSchema = z
   .object({
-    room: z.string().min(1).max(80).optional(),
     capacity: z.number().int().min(1).max(200).optional(),
     startsAt: z.string().datetime().optional(),
     endsAt: z.string().datetime().optional(),
@@ -32,7 +31,6 @@ const CreateClassSchema = z.object({
   subjectId: z.string().optional(),
   teacherUserId: z.string().optional(),
   unitId: z.string().min(1),
-  room: z.string().min(1).max(80),
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime(),
   capacity: z.number().int().min(1).max(200),
@@ -90,7 +88,6 @@ function toClassDto(classSession: ClassWithRelations) {
     displayName: classDisplayName(classSession),
     unitId: classSession.unitId,
     unitName: classSession.unit?.name ?? null,
-    room: classSession.room,
     teacherUserId: classSession.teacherUserId,
     teacherName: classSession.isGuest ? null : (classSession.teacher?.name ?? null),
     startsAt: classSession.startsAt.toISOString(),
@@ -182,7 +179,6 @@ router.post(
         subjectId,
         unitId: input.unitId,
         isGuest: input.isGuest,
-        room: input.room,
         teacherUserId,
         startsAt,
         endsAt,
@@ -390,7 +386,6 @@ router.patch(
     }
 
     const data: Prisma.ClassSessionUpdateInput = {};
-    if (input.room !== undefined) data.room = input.room;
     if (input.capacity !== undefined) data.capacity = input.capacity;
     if (input.startsAt !== undefined) data.startsAt = nextStartsAt;
     if (input.endsAt !== undefined) data.endsAt = nextEndsAt;

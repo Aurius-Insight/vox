@@ -8,14 +8,12 @@ type ClassForm = {
   subjectId: string;
   teacherUserId: string;
   unitId: string;
-  room: string;
   startsAt: string;
   endsAt: string;
   capacity: string;
 };
 
 type EditForm = {
-  room: string;
   capacity: string;
   startsAt: string;
   endsAt: string;
@@ -27,7 +25,6 @@ const EMPTY_FORM: ClassForm = {
   subjectId: '',
   teacherUserId: '',
   unitId: '',
-  room: '',
   startsAt: '',
   endsAt: '',
   capacity: '12',
@@ -46,7 +43,6 @@ export function AgendaPage() {
   // Edicao inline: quando setado, esconde o "Nova aula" e mostra "Editar aula".
   const [editingClass, setEditingClass] = useState<ClassSession>();
   const [editForm, setEditForm] = useState<EditForm>({
-    room: '',
     capacity: '',
     startsAt: '',
     endsAt: '',
@@ -108,7 +104,6 @@ export function AgendaPage() {
           subjectId: form.isGuest ? undefined : form.subjectId,
           teacherUserId: form.isGuest ? undefined : form.teacherUserId,
           unitId: form.unitId,
-          room: form.room,
           startsAt: localInputToIso(form.startsAt),
           endsAt: localInputToIso(form.endsAt),
           capacity: Number(form.capacity),
@@ -128,7 +123,6 @@ export function AgendaPage() {
     setInfo('');
     setEditingClass(classSession);
     setEditForm({
-      room: classSession.room,
       capacity: String(classSession.capacity),
       startsAt: isoToLocalInput(classSession.startsAt),
       endsAt: isoToLocalInput(classSession.endsAt),
@@ -149,7 +143,6 @@ export function AgendaPage() {
 
     try {
       const body: Record<string, unknown> = {
-        room: editForm.room,
         capacity: Number(editForm.capacity),
         startsAt: localInputToIso(editForm.startsAt),
         endsAt: localInputToIso(editForm.endsAt),
@@ -209,14 +202,6 @@ export function AgendaPage() {
             cancele esta aula e crie uma nova.
           </p>
           <form className="grid-form" onSubmit={handleSaveEdit}>
-            <label>
-              Sala
-              <input
-                value={editForm.room}
-                onChange={(event) => updateEdit('room', event.target.value)}
-                required
-              />
-            </label>
             <label>
               Capacidade
               <input
@@ -344,14 +329,6 @@ export function AgendaPage() {
               </select>
             </label>
             <label>
-              Sala
-              <input
-                value={form.room}
-                onChange={(event) => updateField('room', event.target.value)}
-                required
-              />
-            </label>
-            <label>
               Inicio
               <input
                 type="datetime-local"
@@ -396,7 +373,6 @@ export function AgendaPage() {
               <th>Aula</th>
               <th>Professor</th>
               <th>Unidade</th>
-              <th>Sala</th>
               <th>Inicio</th>
               <th>Ocupacao</th>
               <th>Acoes</th>
@@ -405,7 +381,7 @@ export function AgendaPage() {
           <tbody>
             {classes.length === 0 && (
               <tr>
-                <td colSpan={7}>Nenhuma aula cadastrada.</td>
+                <td colSpan={6}>Nenhuma aula cadastrada.</td>
               </tr>
             )}
             {classes.map((classSession) => (
@@ -413,7 +389,6 @@ export function AgendaPage() {
                 <td>{classSession.displayName}</td>
                 <td>{classSession.teacherName ?? '-'}</td>
                 <td>{classSession.unitName ?? '-'}</td>
-                <td>{classSession.room}</td>
                 <td>{formatDateTime(classSession.startsAt)}</td>
                 <td>
                   {classSession.bookedCount}/{classSession.capacity}

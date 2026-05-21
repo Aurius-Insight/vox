@@ -238,7 +238,6 @@ router.get(
           : (classSession.subject?.name ?? 'Sem materia'),
         isGuest: classSession.isGuest,
         unit: classSession.unit?.name ?? null,
-        room: classSession.room,
         startsAt: classSession.startsAt.toISOString(),
         endsAt: classSession.endsAt.toISOString(),
         capacity: classSession.capacity,

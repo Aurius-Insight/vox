@@ -114,7 +114,6 @@ model ClassSession {
   subjectId     String?
   unitId        String?
   isGuest       Boolean   @default(false)
-  room          String
   teacherUserId String?
   startsAt      DateTime
   endsAt        DateTime
@@ -213,7 +212,6 @@ model Unit {
   id        String   @id @default(cuid())
   name      String
   address   String
-  rooms     Int      @default(1)
   capacity  Int      @default(0)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
