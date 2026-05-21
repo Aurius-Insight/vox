@@ -987,6 +987,17 @@ tr.row-selected {
   margin-top: 0.25rem;
 }
 
+/* Telefone do lead como link para o WhatsApp (wa.me). */
+.kanban-card-whatsapp {
+  align-self: flex-start;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.kanban-card-whatsapp:hover {
+  text-decoration: underline;
+}
+
 /* Aluno ja reservou: indicador inerte no lugar do botao (sem cancelamento). */
 .class-confirmed {
   align-items: center;
