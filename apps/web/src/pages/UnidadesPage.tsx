@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { Unit } from '../api/types';
+import { Modal } from '../components/Modal';
 import { useToast } from '../components/ToastProvider';
 
 type UnitForm = {
@@ -22,6 +23,7 @@ export function UnidadesPage() {
   const [saving, setSaving] = useState(false);
   const toast = useToast();
   const [pendingUnitId, setPendingUnitId] = useState<string>();
+  const [showForm, setShowForm] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -41,6 +43,7 @@ export function UnidadesPage() {
   }
 
   function startEdit(unit: Unit) {
+    setShowForm(true);
     setEditingUnitId(unit.id);
     setForm({
       name: unit.name,
@@ -52,6 +55,16 @@ export function UnidadesPage() {
   function cancelEdit() {
     setEditingUnitId(undefined);
     setForm(EMPTY_FORM);
+  }
+
+  function openNew() {
+    cancelEdit();
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    cancelEdit();
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -76,7 +89,7 @@ export function UnidadesPage() {
           body: JSON.stringify(payload),
         });
       }
-      cancelEdit();
+      closeForm();
       await load();
     } catch (err) {
       toast.error(
@@ -114,11 +127,19 @@ export function UnidadesPage() {
           <p className="eyebrow">Unidades</p>
           <h1>Gestao de unidades</h1>
         </div>
+        <div className="row-actions">
+          <button type="button" onClick={openNew}>
+            Nova unidade
+          </button>
+        </div>
       </header>
 
-      <section className="form-card">
-        <h2>{editingUnitId ? 'Editar unidade' : 'Nova unidade'}</h2>
-        <form className="grid-form" onSubmit={handleSubmit}>
+      {showForm && (
+        <Modal
+          title={editingUnitId ? 'Editar unidade' : 'Nova unidade'}
+          onClose={closeForm}
+        >
+          <form className="grid-form" onSubmit={handleSubmit}>
           <label>
             Nome
             <input
@@ -151,15 +172,14 @@ export function UnidadesPage() {
               <button type="submit" disabled={saving}>
                 {saving ? 'Salvando...' : editingUnitId ? 'Salvar alteracoes' : 'Criar unidade'}
               </button>
-              {editingUnitId && (
-                <button type="button" className="secondary-button" onClick={cancelEdit}>
-                  Cancelar
-                </button>
-              )}
+              <button type="button" className="secondary-button" onClick={closeForm}>
+                Cancelar
+              </button>
             </div>
           </div>
         </form>
-      </section>
+        </Modal>
+      )}
 
       <section className="table-card">
         <table>
