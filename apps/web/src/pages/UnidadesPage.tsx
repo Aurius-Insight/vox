@@ -5,14 +5,12 @@ import type { Unit } from '../api/types';
 type UnitForm = {
   name: string;
   address: string;
-  rooms: string;
   capacity: string;
 };
 
 const EMPTY_FORM: UnitForm = {
   name: '',
   address: '',
-  rooms: '1',
   capacity: '0',
 };
 
@@ -47,7 +45,6 @@ export function UnidadesPage() {
     setForm({
       name: unit.name,
       address: unit.address,
-      rooms: String(unit.rooms),
       capacity: String(unit.capacity),
     });
   }
@@ -65,7 +62,6 @@ export function UnidadesPage() {
     const payload = {
       name: form.name,
       address: form.address,
-      rooms: Number(form.rooms),
       capacity: Number(form.capacity),
     };
 
@@ -140,17 +136,6 @@ export function UnidadesPage() {
             />
           </label>
           <label>
-            Salas
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={form.rooms}
-              onChange={(event) => updateField('rooms', event.target.value)}
-              required
-            />
-          </label>
-          <label>
             Capacidade
             <input
               type="number"
@@ -182,7 +167,6 @@ export function UnidadesPage() {
             <tr>
               <th>Unidade</th>
               <th>Endereco</th>
-              <th>Salas</th>
               <th>Capacidade</th>
               <th>Status</th>
               <th>Acoes</th>
@@ -191,14 +175,13 @@ export function UnidadesPage() {
           <tbody>
             {units.length === 0 && (
               <tr>
-                <td colSpan={6}>Nenhuma unidade cadastrada.</td>
+                <td colSpan={5}>Nenhuma unidade cadastrada.</td>
               </tr>
             )}
             {units.map((unit) => (
               <tr key={unit.id}>
                 <td>{unit.name}</td>
                 <td>{unit.address}</td>
-                <td>{unit.rooms}</td>
                 <td>{unit.capacity}</td>
                 <td>{unit.active ? 'ativa' : 'inativa'}</td>
                 <td>

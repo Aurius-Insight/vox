@@ -87,7 +87,7 @@ export function PresencaPage() {
                 <strong>{classSession.displayName}</strong>
                 <span>
                   {classSession.teacherName ? `${classSession.teacherName} - ` : ''}
-                  {classSession.unitName ?? 'Sem unidade'} - {classSession.room} -{' '}
+                  {classSession.unitName ?? 'Sem unidade'} -{' '}
                   {formatDateTime(classSession.startsAt)}
                 </span>
               </div>

@@ -13,7 +13,6 @@ const MANAGE_ROLES = ['diretor', 'coordenacao'] as const;
 const CreateUnitSchema = z.object({
   name: z.string().min(2).max(120),
   address: z.string().min(2).max(200),
-  rooms: z.number().int().min(1).max(100),
   capacity: z.number().int().min(0).max(10_000),
 });
 
@@ -21,7 +20,6 @@ const UpdateUnitSchema = z
   .object({
     name: z.string().min(2).max(120).optional(),
     address: z.string().min(2).max(200).optional(),
-    rooms: z.number().int().min(1).max(100).optional(),
     capacity: z.number().int().min(0).max(10_000).optional(),
     active: z.boolean().optional(),
   })

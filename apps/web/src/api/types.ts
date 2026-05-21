@@ -48,7 +48,6 @@ export type ClassSession = {
   displayName: string;
   unitId: string | null;
   unitName: string | null;
-  room: string;
   teacherUserId: string | null;
   teacherName: string | null;
   startsAt: string;
@@ -142,7 +141,6 @@ export type Unit = {
   id: string;
   name: string;
   address: string;
-  rooms: number;
   capacity: number;
   active: boolean;
 };
