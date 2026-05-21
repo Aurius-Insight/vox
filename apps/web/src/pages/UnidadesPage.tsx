@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { Unit } from '../api/types';
+import { useToast } from '../components/ToastProvider';
 
 type UnitForm = {
   name: string;
@@ -18,8 +19,8 @@ export function UnidadesPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [form, setForm] = useState<UnitForm>(EMPTY_FORM);
   const [editingUnitId, setEditingUnitId] = useState<string>();
-  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
   const [pendingUnitId, setPendingUnitId] = useState<string>();
 
   const load = useCallback(async () => {
@@ -27,9 +28,9 @@ export function UnidadesPage() {
       const response = await api<{ data: Unit[] }>('/api/units');
       setUnits(response.data);
     } catch {
-      setError('Nao foi possivel carregar as unidades.');
+      toast.error('Nao foi possivel carregar as unidades.');
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     void load();
@@ -40,7 +41,6 @@ export function UnidadesPage() {
   }
 
   function startEdit(unit: Unit) {
-    setError('');
     setEditingUnitId(unit.id);
     setForm({
       name: unit.name,
@@ -56,7 +56,6 @@ export function UnidadesPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setError('');
     setSaving(true);
 
     const payload = {
@@ -80,7 +79,9 @@ export function UnidadesPage() {
       cancelEdit();
       await load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar a unidade.');
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar a unidade.',
+      );
     } finally {
       setSaving(false);
     }
@@ -88,7 +89,6 @@ export function UnidadesPage() {
 
   async function handleToggle(unit: Unit) {
     setPendingUnitId(unit.id);
-    setError('');
 
     try {
       const response = await api<{ data: Unit }>(`/api/units/${unit.id}`, {
@@ -99,7 +99,9 @@ export function UnidadesPage() {
         current.map((item) => (item.id === response.data.id ? response.data : item)),
       );
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel atualizar a unidade.');
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel atualizar a unidade.',
+      );
     } finally {
       setPendingUnitId(undefined);
     }
@@ -113,8 +115,6 @@ export function UnidadesPage() {
           <h1>Gestao de unidades</h1>
         </div>
       </header>
-
-      {error && <p className="form-error">{error}</p>}
 
       <section className="form-card">
         <h2>{editingUnitId ? 'Editar unidade' : 'Nova unidade'}</h2>

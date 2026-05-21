@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { ClassSession } from '../api/types';
 import { formatDateTime } from '../lib/format';
+import { useToast } from '../components/ToastProvider';
 
 type AttendanceResponse = {
   data: {
@@ -13,17 +14,17 @@ type AttendanceStatus = 'presente' | 'no_show';
 
 export function PresencaPage() {
   const [classes, setClasses] = useState<ClassSession[]>([]);
-  const [error, setError] = useState('');
   const [pendingKey, setPendingKey] = useState<string>();
+  const toast = useToast();
 
   const load = useCallback(async () => {
     try {
       const response = await api<{ data: ClassSession[] }>('/api/classes');
       setClasses(response.data);
     } catch {
-      setError('Nao foi possivel carregar as aulas.');
+      toast.error('Nao foi possivel carregar as aulas.');
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     void load();
@@ -32,7 +33,6 @@ export function PresencaPage() {
   async function markAttendance(classId: string, studentId: string, status: AttendanceStatus) {
     const key = `${classId}:${studentId}`;
     setPendingKey(key);
-    setError('');
 
     try {
       const response = await api<AttendanceResponse>(`/api/classes/${classId}/attendance`, {
@@ -56,11 +56,9 @@ export function PresencaPage() {
         ),
       );
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        setError(err.message);
-      } else {
-        setError('Nao foi possivel registrar a presenca.');
-      }
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel registrar a presenca.',
+      );
     } finally {
       setPendingKey(undefined);
     }
@@ -74,8 +72,6 @@ export function PresencaPage() {
           <h1>Presenca e creditos</h1>
         </div>
       </header>
-
-      {error && <p className="form-error">{error}</p>}
 
       {classes.length === 0 && <p className="muted-text">Nenhuma aula com alunos agendados.</p>}
 
