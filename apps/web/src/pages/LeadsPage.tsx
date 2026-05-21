@@ -349,6 +349,8 @@ export function LeadsPage() {
         </form>
       </section>
 
+      <UnitTabs units={units} active={unitFilter} onSelect={setUnitFilter} />
+
       <section className="filters-bar">
         <label className="filter-search">
           <span>Buscar</span>
@@ -358,18 +360,6 @@ export function LeadsPage() {
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
           />
-        </label>
-        <label className="filter-unit">
-          <span>Unidade</span>
-          <select value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)}>
-            <option value="">Todas</option>
-            {units.map((unit) => (
-              <option key={unit.id} value={unit.name}>
-                {unit.name}
-              </option>
-            ))}
-            <option value={NAO_INFORMADO}>Não informado</option>
-          </select>
         </label>
         <span className="filters-count">
           {leads.length} {leads.length === 1 ? 'lead' : 'leads'}
@@ -401,6 +391,44 @@ export function LeadsPage() {
         </section>
       </DndContext>
     </main>
+  );
+}
+
+/**
+ * Abas de unidade — cada aba filtra o Kanban por uma unidade. "Todas" mostra
+ * o pipeline completo; "Nao informado" agrupa leads sem unidade definida.
+ * O valor da aba e o mesmo enviado a API no parametro `unit`.
+ */
+function UnitTabs({
+  units,
+  active,
+  onSelect,
+}: {
+  units: Unit[];
+  active: string;
+  onSelect: (value: string) => void;
+}) {
+  const tabs = [
+    { value: '', label: 'Todas' },
+    ...units.map((unit) => ({ value: unit.name, label: unit.name })),
+    { value: NAO_INFORMADO, label: 'Não informado' },
+  ];
+
+  return (
+    <nav className="unit-tabs" aria-label="Pipeline por unidade">
+      {tabs.map((tab) => (
+        <button
+          key={tab.value || 'todas'}
+          type="button"
+          className="unit-tab"
+          data-active={active === tab.value}
+          aria-pressed={active === tab.value}
+          onClick={() => onSelect(tab.value)}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </nav>
   );
 }
 

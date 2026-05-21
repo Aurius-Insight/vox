@@ -1004,6 +1004,38 @@ tr.row-selected {
 }
 
 /* Barra de filtros acima do Kanban — busca + select de unidade. */
+/* Abas de unidade do Kanban — pills horizontais acima dos filtros. */
+.unit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.unit-tab {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  min-height: 34px;
+  padding: 0.35rem 0.95rem;
+}
+
+.unit-tab:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.unit-tab[data-active='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.unit-tab[data-active='true']:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
 .filters-bar {
   align-items: end;
   background: var(--surface);
@@ -1012,7 +1044,7 @@ tr.row-selected {
   box-shadow: var(--shadow-sm);
   display: grid;
   gap: 1rem;
-  grid-template-columns: 1fr 220px auto;
+  grid-template-columns: 1fr auto;
   padding: 1rem 1.2rem;
 }
 
