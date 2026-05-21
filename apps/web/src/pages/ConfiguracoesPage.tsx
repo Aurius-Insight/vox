@@ -10,6 +10,7 @@ import {
   type Unit,
 } from '../api/types';
 import { formatCents, formatDate, parseReaisToCents } from '../lib/format';
+import { useToast } from '../components/ToastProvider';
 
 type PackageForm = {
   name: string;
@@ -44,7 +45,11 @@ export function ConfiguracoesPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [packageForm, setPackageForm] = useState<PackageForm>(EMPTY_PACKAGE);
   const [userForm, setUserForm] = useState<UserForm>(EMPTY_USER);
-  const [error, setError] = useState('');
+  const toast = useToast();
+  // setError encaminha para o sistema de toasts (mensagem vazia = no-op).
+  const setError = (message: string) => {
+    if (message) toast.error(message);
+  };
   const [savingPackage, setSavingPackage] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
   const [pendingUserId, setPendingUserId] = useState<string>();
@@ -241,8 +246,6 @@ export function ConfiguracoesPage() {
           <h1>Administracao</h1>
         </div>
       </header>
-
-      {error && <p className="form-error">{error}</p>}
 
       <section className="form-card">
         <h2>{editingPackageId ? 'Editar pacote' : 'Novo pacote'}</h2>
