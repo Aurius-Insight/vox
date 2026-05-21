@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import { RequireAuth } from './auth/RequireAuth';
@@ -7,7 +8,6 @@ import { firstAccessibleRoute } from './lib/navigation';
 import { AgendaPage } from './pages/AgendaPage';
 import { AlunosPage } from './pages/AlunosPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
-import { DashboardPage } from './pages/DashboardPage';
 import { LeadsPage } from './pages/LeadsPage';
 import { LoginPage } from './pages/LoginPage';
 import { NoAccessPage } from './pages/NoAccessPage';
@@ -15,6 +15,11 @@ import { PortalHomePage } from './pages/PortalHomePage';
 import { PortalLoginPage } from './pages/PortalLoginPage';
 import { PresencaPage } from './pages/PresencaPage';
 import { UnidadesPage } from './pages/UnidadesPage';
+
+// O Dashboard carrega o Recharts (pesado) — code-split: so baixa quando aberto.
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })),
+);
 
 /** Decide o destino da raiz conforme a sessao e os papeis do usuario. */
 function HomeRedirect() {
@@ -47,7 +52,16 @@ export default function App() {
               <Route path="/sem-acesso" element={<NoAccessPage />} />
 
               <Route element={<RequireAuth roles={['diretor']} />}>
-                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <Suspense
+                      fallback={<div className="page-status">Carregando dashboard...</div>}
+                    >
+                      <DashboardPage />
+                    </Suspense>
+                  }
+                />
               </Route>
 
               <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
