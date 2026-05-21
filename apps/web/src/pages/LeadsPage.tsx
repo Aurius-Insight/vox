@@ -9,6 +9,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { ApiClientError, api } from '../api/client';
+import { whatsappLink } from '../lib/format';
 import {
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
@@ -478,6 +479,9 @@ function LeadCard({ lead, onConvert }: { lead: Lead; onConvert: () => void }) {
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
 
+  // Telefone vira link wa.me — abre a conversa do lead direto no WhatsApp.
+  const waLink = whatsappLink(lead.whatsapp);
+
   return (
     <article
       ref={setNodeRef}
@@ -488,7 +492,20 @@ function LeadCard({ lead, onConvert }: { lead: Lead; onConvert: () => void }) {
       {...attributes}
     >
       <p className="kanban-card-name">{lead.name}</p>
-      <p className="kanban-card-meta">{lead.whatsapp}</p>
+      {waLink ? (
+        <a
+          className="kanban-card-meta kanban-card-whatsapp"
+          href={waLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          // Impede que o clique no link inicie o drag do card.
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {lead.whatsapp}
+        </a>
+      ) : (
+        <p className="kanban-card-meta">{lead.whatsapp}</p>
+      )}
       <p className="kanban-card-meta">
         {lead.unitInterest} · {lead.campaign ?? lead.source}
       </p>

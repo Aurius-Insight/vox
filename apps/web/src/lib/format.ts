@@ -49,3 +49,19 @@ export function parseReaisToCents(value: string) {
   const reais = Number(normalized);
   return Number.isFinite(reais) ? Math.round(reais * 100) : 0;
 }
+
+/**
+ * Monta o link wa.me a partir de um telefone brasileiro. Usa o tamanho para
+ * decidir o codigo do pais: 10-11 digitos = DDD + numero (prefixa 55);
+ * 12-13 = ja vem com o 55. Devolve `null` quando o numero nao e reconhecivel.
+ */
+export function whatsappLink(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10 || digits.length === 11) {
+    return `https://wa.me/55${digits}`;
+  }
+  if (digits.length === 12 || digits.length === 13) {
+    return `https://wa.me/${digits}`;
+  }
+  return null;
+}
