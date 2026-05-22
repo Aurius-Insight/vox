@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { redis } from '../db/redis.js';
 import { env } from '../config/env.js';
 
-// Link magico do portal do aluno: token de uso unico, TTL curto.
-// Usado tanto pelo proprio aluno (POST /api/portal/magic-links) quanto pela
-// equipe interna (POST /api/students/:id/magic-link) para reenviar acesso.
-export const MAGIC_LINK_TTL_SECONDS = 15 * 60;
+// Link magico do portal do aluno: token de uso unico, valido por 1 hora.
+// So serve para "abrir a porta" uma vez — depois a sessao do portal
+// (deslizante, renovada a cada uso) mantem o aluno logado por muito tempo.
+// Usado pelo proprio aluno (POST /api/portal/magic-links) e pela equipe
+// interna (POST /api/students/:id/magic-link) para reenviar acesso.
+export const MAGIC_LINK_TTL_SECONDS = 60 * 60;
 
 const magicLinkKey = (token: string) => `magic:${token}`;
 
