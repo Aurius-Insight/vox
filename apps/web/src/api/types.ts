@@ -93,15 +93,18 @@ export type Lead = {
   stage: LeadStage;
 };
 
+export type StudentType = 'experimental' | 'matriculado';
+
 export type StudentSummary = {
   id: string;
   name: string;
+  type: StudentType;
   enrollmentCode: string;
   whatsapp: string;
   cpf?: string;
   unitId: string | null;
   unitName: string | null;
-  packageName: string;
+  packageName: string | null;
   creditBalance: number;
   status: string;
 };

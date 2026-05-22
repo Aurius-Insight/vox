@@ -57,6 +57,7 @@ router.get(
       data: students.map((student) => ({
         id: student.id,
         name: student.name,
+        type: student.type,
         enrollmentCode: student.enrollmentCode,
         whatsapp: maskPhone(student.whatsapp),
         cpf: student.cpfMasked ?? undefined,
@@ -211,6 +212,7 @@ router.get(
       data: {
         id: student.id,
         name: student.name,
+        type: student.type,
         enrollmentCode: student.enrollmentCode,
         whatsapp: maskPhone(student.whatsapp),
         email: student.email ?? undefined,

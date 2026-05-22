@@ -3,11 +3,15 @@ import { canConvertLead, randomEnrollmentCode, uniqueEnrollmentCode } from './en
 
 describe('canConvertLead', () => {
   it('permite converter um lead que ainda nao virou aluno', () => {
-    expect(canConvertLead({ hasStudent: false })).toEqual({ ok: true });
+    expect(canConvertLead({})).toEqual({ ok: true });
   });
 
-  it('bloqueia converter um lead que ja tem aluno vinculado', () => {
-    expect(canConvertLead({ hasStudent: true })).toEqual({
+  it('permite converter (promover) um lead com aluno experimental', () => {
+    expect(canConvertLead({ studentType: 'experimental' })).toEqual({ ok: true });
+  });
+
+  it('bloqueia converter um lead que ja tem aluno matriculado', () => {
+    expect(canConvertLead({ studentType: 'matriculado' })).toEqual({
       ok: false,
       reason: 'already_enrolled',
     });

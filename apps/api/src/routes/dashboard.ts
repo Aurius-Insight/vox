@@ -27,7 +27,9 @@ router.get(
     // `unitInterest` — entao filtram por match exato do nome (leadWhere abaixo),
     // igual a aba por unidade da pagina de Vendas.
     const classWhere = unitId ? { unitId } : {};
-    const studentWhere = unitId ? { active: true, unitId } : { active: true };
+    const studentWhere = unitId
+      ? { active: true, type: 'matriculado' as const, unitId }
+      : { active: true, type: 'matriculado' as const };
     const classRelationFilter = unitId ? { classSession: { unitId } } : {};
 
     const startOfMonth = new Date();

@@ -530,6 +530,7 @@ export function AlunosPage() {
             <thead>
               <tr>
                 <th>Aluno</th>
+                <th>Tipo</th>
                 <th>Matricula</th>
                 <th>Unidade</th>
                 <th>Saldo</th>
@@ -539,7 +540,7 @@ export function AlunosPage() {
             <tbody>
               {students.length === 0 && (
                 <tr>
-                  <td colSpan={5}>Nenhum aluno cadastrado.</td>
+                  <td colSpan={6}>Nenhum aluno cadastrado.</td>
                 </tr>
               )}
               {students.map((student) => (
@@ -549,22 +550,31 @@ export function AlunosPage() {
                   onClick={() => void openStudent(student.id)}
                 >
                   <td>{student.name}</td>
+                  <td>
+                    <span className="status-chip">
+                      {student.type === 'experimental' ? 'Experimental' : 'Matriculado'}
+                    </span>
+                  </td>
                   <td>{student.enrollmentCode}</td>
                   <td>{student.unitName ?? '-'}</td>
                   <td>{student.creditBalance}</td>
                   <td>
                     {/* stopPropagation: o clique gera o link sem abrir o detalhe. */}
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={linkPendingId === student.id}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        void handleGenerateLink(student.id);
-                      }}
-                    >
-                      {linkPendingId === student.id ? 'Gerando...' : 'Gerar link'}
-                    </button>
+                    {student.type === 'matriculado' ? (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        disabled={linkPendingId === student.id}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleGenerateLink(student.id);
+                        }}
+                      >
+                        {linkPendingId === student.id ? 'Gerando...' : 'Gerar link'}
+                      </button>
+                    ) : (
+                      <span className="muted-text">—</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -582,9 +592,13 @@ export function AlunosPage() {
               <div>
                 <p className="eyebrow">{selected.enrollmentCode}</p>
                 <h2>{selected.name}</h2>
+                <span className="status-chip">
+                  {selected.type === 'experimental' ? 'Experimental' : 'Matriculado'}
+                </span>
                 <p className="muted-text">
-                  {selected.unitName ?? 'Sem unidade'} - {selected.packageName} -{' '}
-                  {selected.creditBalance} aulas restantes
+                  {selected.type === 'experimental'
+                    ? `${selected.unitName ?? 'Sem unidade'} - Aluno experimental (sem pacote)`
+                    : `${selected.unitName ?? 'Sem unidade'} - ${selected.packageName} - ${selected.creditBalance} aulas restantes`}
                 </p>
                 <p className="muted-text">
                   WhatsApp {selected.whatsapp}
@@ -653,7 +667,18 @@ export function AlunosPage() {
                 </div>
               )}
 
-              {canOperate && (
+              {canOperate && selected.type === 'experimental' && (
+                <div>
+                  <h3>Matricular aluno</h3>
+                  <p className="muted-text">
+                    Aluno experimental ainda sem pacote. Para matricular, use{' '}
+                    <strong>"Converter lead"</strong> no topo da pagina — o cadastro pede
+                    CPF, unidade e pacote.
+                  </p>
+                </div>
+              )}
+
+              {canOperate && selected.type === 'matriculado' && (
                 <div>
                   <h3>Renovar pacote</h3>
                   <p className="muted-text">
