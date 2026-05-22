@@ -29,7 +29,9 @@ const SESSION_COOKIE = 'vox_session';
 const PORTAL_COOKIE = 'vox_portal_session';
 const PORTAL_COOKIE_PATH = '/api/portal';
 const SESSION_TTL_MS = 8 * 60 * 60_000;
-const PORTAL_SESSION_TTL_MS = 2 * 60 * 60_000;
+// Sessao do portal do aluno: 90 dias, deslizante (renovada a cada uso em
+// attachPortalStudent). Aluno ativo atravessa o pacote inteiro sem link novo.
+const PORTAL_SESSION_TTL_MS = 90 * 24 * 60 * 60_000;
 const SESSION_TTL_SECONDS = SESSION_TTL_MS / 1000;
 const PORTAL_SESSION_TTL_SECONDS = PORTAL_SESSION_TTL_MS / 1000;
 
@@ -135,7 +137,7 @@ export function requireRole(...allowedRoles: Role[]): RequestHandler {
   };
 }
 
-export const attachPortalStudent: RequestHandler = async (req, _res, next) => {
+export const attachPortalStudent: RequestHandler = async (req, res, next) => {
   try {
     const sessionId = req.cookies?.[PORTAL_COOKIE];
     if (!sessionId) return next();
@@ -154,7 +156,13 @@ export const attachPortalStudent: RequestHandler = async (req, _res, next) => {
       },
     });
 
-    if (student) req.student = student;
+    if (student) {
+      req.student = student;
+      // Sessao deslizante: cada requisicao autenticada renova o prazo, no
+      // Redis e no cookie — aluno ativo nunca e deslogado.
+      await redis.set(portalSessionKey(sessionId), studentId, PORTAL_SESSION_TTL_SECONDS);
+      setPortalSessionCookie(res, sessionId);
+    }
     return next();
   } catch (error) {
     return next(error);

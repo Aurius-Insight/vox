@@ -80,7 +80,7 @@ router.post(
     try {
       await sendMessageByPhone(
         student.whatsapp,
-        `Vox RJ — seu link de acesso ao portal (valido por 15 min): ${link}`,
+        `Vox RJ — seu link de acesso ao portal (valido por 1 hora): ${link}`,
       );
     } catch (error) {
       logger.error('magic_link_send_failed', {
