@@ -321,6 +321,106 @@ router.post(
   }),
 );
 
+const BookingSchema = z.object({
+  studentId: z.string().min(1),
+});
+
+// Agenda um aluno numa aula pela equipe (pagina de Presenca). O tipo do
+// agendamento segue o tipo do aluno — experimental nao consome credito.
+router.post(
+  '/:classId/bookings',
+  requireAuth,
+  requireRole('diretor', 'coordenacao', 'professor'),
+  asyncHandler(async (req, res) => {
+    const input = BookingSchema.parse(req.body);
+    const professorScoped = isProfessorScoped(req.user!.roles);
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const classSession = await tx.classSession.findUnique({
+        where: { id: req.params.classId },
+        include: { bookings: { where: { status: 'agendado' }, select: { id: true } } },
+      });
+      if (!classSession || classSession.canceledAt) {
+        return { ok: false as const, error: 'class_not_found' as const };
+      }
+      if (professorScoped && classSession.teacherUserId !== req.user!.id) {
+        return { ok: false as const, error: 'not_class_owner' as const };
+      }
+      if (unitScope && classSession.unitId !== unitScope) {
+        return { ok: false as const, error: 'not_class_unit' as const };
+      }
+
+      const student = await tx.student.findFirst({
+        where: { id: input.studentId, active: true },
+      });
+      if (!student) return { ok: false as const, error: 'student_not_found' as const };
+
+      const already = await tx.classBooking.findFirst({
+        where: { classSessionId: classSession.id, studentId: student.id, status: 'agendado' },
+        select: { id: true },
+      });
+      if (already) return { ok: false as const, error: 'already_booked' as const };
+
+      if (classSession.bookings.length >= classSession.capacity) {
+        return { ok: false as const, error: 'class_full' as const };
+      }
+
+      // Experimental nao consome credito; matriculado segue o fluxo regular.
+      const isExperimental = student.type === 'experimental';
+      const booking = await tx.classBooking.upsert({
+        where: {
+          classSessionId_studentId: {
+            classSessionId: classSession.id,
+            studentId: student.id,
+          },
+        },
+        update: {
+          status: 'agendado',
+          type: isExperimental ? 'experimental' : 'regular',
+          consumesCredit: !isExperimental,
+          canceledAt: null,
+        },
+        create: {
+          classSessionId: classSession.id,
+          studentId: student.id,
+          type: isExperimental ? 'experimental' : 'regular',
+          status: 'agendado',
+          consumesCredit: !isExperimental,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'class_booking',
+          entityId: booking.id,
+          action: 'booking.created_by_staff',
+          after: booking,
+        },
+      });
+
+      return { ok: true as const, booking };
+    });
+
+    if (!result.ok) {
+      const errors: Record<string, { status: number; message: string }> = {
+        class_not_found: { status: 404, message: 'Aula nao encontrada.' },
+        not_class_owner: { status: 403, message: 'Voce so pode agendar nas suas aulas.' },
+        not_class_unit: { status: 403, message: 'Aula fora da sua unidade.' },
+        student_not_found: { status: 404, message: 'Aluno nao encontrado.' },
+        already_booked: { status: 409, message: 'Aluno ja esta agendado nesta aula.' },
+        class_full: { status: 409, message: 'Aula sem vagas disponiveis.' },
+      };
+      const mapped = errors[result.error];
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    res.status(201).json({ data: { id: result.booking.id, status: result.booking.status } });
+  }),
+);
+
 router.patch(
   '/:classId',
   requireAuth,

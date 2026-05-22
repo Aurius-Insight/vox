@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
-import type { ClassSession } from '../api/types';
+import type { ClassSession, StudentType } from '../api/types';
 import { formatDateTime } from '../lib/format';
+import { Modal } from '../components/Modal';
 import { useToast } from '../components/ToastProvider';
 
 type AttendanceResponse = {
@@ -12,9 +13,23 @@ type AttendanceResponse = {
 
 type AttendanceStatus = 'presente' | 'no_show';
 
+type StudentResult = {
+  id: string;
+  name: string;
+  type: StudentType;
+  enrollmentCode: string;
+  creditBalance: number;
+  unitName: string | null;
+};
+
 export function PresencaPage() {
   const [classes, setClasses] = useState<ClassSession[]>([]);
   const [pendingKey, setPendingKey] = useState<string>();
+  const [addingTo, setAddingTo] = useState<ClassSession>();
+  const [studentQuery, setStudentQuery] = useState('');
+  const [results, setResults] = useState<StudentResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [bookingId, setBookingId] = useState<string>();
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -29,6 +44,33 @@ export function PresencaPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Busca de alunos (debounce 300ms) enquanto o modal de adicionar esta aberto.
+  useEffect(() => {
+    const term = studentQuery.trim();
+    if (!addingTo || term.length < 2) {
+      setResults([]);
+      return;
+    }
+    let active = true;
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const response = await api<{ data: StudentResult[] }>(
+          `/api/students/search?q=${encodeURIComponent(term)}`,
+        );
+        if (active) setResults(response.data);
+      } catch {
+        if (active) setResults([]);
+      } finally {
+        if (active) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [studentQuery, addingTo]);
 
   async function markAttendance(classId: string, studentId: string, status: AttendanceStatus) {
     const key = `${classId}:${studentId}`;
@@ -64,6 +106,40 @@ export function PresencaPage() {
     }
   }
 
+  function openAdd(classSession: ClassSession) {
+    setAddingTo(classSession);
+    setStudentQuery('');
+    setResults([]);
+  }
+
+  async function handleBook(student: StudentResult) {
+    if (!addingTo) return;
+    setBookingId(student.id);
+    try {
+      await api(`/api/classes/${addingTo.id}/bookings`, {
+        method: 'POST',
+        body: JSON.stringify({ studentId: student.id }),
+      });
+      toast.success(`${student.name} agendado na aula.`);
+      setAddingTo(undefined);
+      await load();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel agendar o aluno.',
+      );
+    } finally {
+      setBookingId(undefined);
+    }
+  }
+
+  const term = studentQuery.trim();
+  // Alunos ja agendados nesta aula saem da lista de resultados.
+  const availableResults = addingTo
+    ? results.filter(
+        (student) => !addingTo.bookedStudents.some((booked) => booked.id === student.id),
+      )
+    : [];
+
   return (
     <main className="app-page">
       <header className="page-header">
@@ -73,7 +149,48 @@ export function PresencaPage() {
         </div>
       </header>
 
-      {classes.length === 0 && <p className="muted-text">Nenhuma aula com alunos agendados.</p>}
+      {addingTo && (
+        <Modal
+          title={`Adicionar aluno — ${addingTo.displayName}`}
+          onClose={() => setAddingTo(undefined)}
+        >
+          <label>
+            Buscar aluno
+            <input
+              value={studentQuery}
+              onChange={(event) => setStudentQuery(event.target.value)}
+              placeholder="Nome ou matricula"
+              autoFocus
+            />
+          </label>
+          <div className="stack">
+            {term.length < 2 && (
+              <p className="muted-text">Digite ao menos 2 letras para buscar.</p>
+            )}
+            {searching && <p className="muted-text">Buscando...</p>}
+            {!searching && term.length >= 2 && availableResults.length === 0 && (
+              <p className="muted-text">Nenhum aluno disponivel encontrado.</p>
+            )}
+            {availableResults.map((student) => (
+              <button
+                type="button"
+                key={student.id}
+                className="secondary-button"
+                disabled={bookingId === student.id}
+                onClick={() => void handleBook(student)}
+              >
+                {bookingId === student.id
+                  ? 'Agendando...'
+                  : `${student.name} · ${student.enrollmentCode} · ${
+                      student.type === 'experimental' ? 'Experimental' : 'Matriculado'
+                    }`}
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {classes.length === 0 && <p className="muted-text">Nenhuma aula cadastrada.</p>}
 
       <div className="stack">
         {classes.map((classSession) => (
@@ -87,9 +204,18 @@ export function PresencaPage() {
                   {formatDateTime(classSession.startsAt)}
                 </span>
               </div>
-              <span className="status-chip">
-                {classSession.bookedCount}/{classSession.capacity} agendados
-              </span>
+              <div className="row-actions">
+                <span className="status-chip">
+                  {classSession.bookedCount}/{classSession.capacity} agendados
+                </span>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => openAdd(classSession)}
+                >
+                  Adicionar aluno
+                </button>
+              </div>
             </div>
 
             <table>
