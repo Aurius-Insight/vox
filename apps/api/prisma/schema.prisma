@@ -28,6 +28,11 @@ enum AttendanceStatus {
   no_show
 }
 
+enum StudentType {
+  experimental
+  matriculado
+}
+
 model Subject {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -92,9 +97,10 @@ model Student {
   email          String?
   cpfHash        String?
   cpfMasked      String?
-  enrollmentCode String   @unique
-  packageName    String
-  creditBalance  Int      @default(0)
+  enrollmentCode String      @unique
+  type           StudentType @default(matriculado)
+  packageName    String?
+  creditBalance  Int         @default(0)
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
