@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ApiClientError, api } from '../api/client';
+import { ThemeToggle } from '../components/ThemeToggle';
 
 type DisciplinaResumo = {
   disciplina: string;
@@ -99,9 +100,12 @@ export function PortalHomePage() {
           <p className="eyebrow">Portal do aluno</p>
           <h1>Ola, {student?.name ?? 'aluno'}</h1>
         </div>
-        <button type="button" className="secondary-button" onClick={() => void handleLogout()}>
-          Sair
-        </button>
+        <div className="row-actions">
+          <ThemeToggle />
+          <button type="button" className="secondary-button" onClick={() => void handleLogout()}>
+            Sair
+          </button>
+        </div>
       </header>
 
       {error && <p className="form-error">{error}</p>}
