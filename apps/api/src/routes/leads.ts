@@ -141,9 +141,40 @@ router.patch(
     const input = UpdateStageSchema.parse(req.body);
 
     try {
-      const lead = await prisma.lead.update({
-        where: { id: req.params.leadId },
-        data: { stage: input.stage },
+      const lead = await prisma.$transaction(async (tx) => {
+        const updated = await tx.lead.update({
+          where: { id: req.params.leadId },
+          data: { stage: input.stage },
+          include: { student: { select: { id: true } } },
+        });
+
+        // Ao agendar a aula experimental, o lead vira um aluno experimental
+        // (sem pacote/saldo). Se ja existe aluno vinculado, nada a fazer.
+        if (input.stage === 'experimental_agendada' && !updated.student) {
+          const enrollmentCode = await uniqueEnrollmentCode((code) =>
+            tx.student
+              .findUnique({ where: { enrollmentCode: code } })
+              .then((found) => found !== null),
+          );
+          const matchedUnit = await tx.unit.findFirst({
+            where: { name: updated.unitInterest, active: true },
+            select: { id: true },
+          });
+          await tx.student.create({
+            data: {
+              leadId: updated.id,
+              name: updated.name,
+              whatsapp: updated.whatsapp,
+              email: updated.email,
+              unitId: matchedUnit?.id ?? null,
+              enrollmentCode,
+              type: 'experimental',
+              creditBalance: 0,
+            },
+          });
+        }
+
+        return updated;
       });
       res.json({ data: toLeadDto(lead, true) });
     } catch (error) {
@@ -178,11 +209,11 @@ router.post(
     const result = await prisma.$transaction(async (tx) => {
       const lead = await tx.lead.findUnique({
         where: { id: req.params.leadId },
-        include: { student: { select: { id: true } } },
+        include: { student: { select: { id: true, type: true } } },
       });
       if (!lead) return { ok: false as const, error: 'lead_not_found' as const };
 
-      const check = canConvertLead({ hasStudent: Boolean(lead.student) });
+      const check = canConvertLead({ studentType: lead.student?.type ?? null });
       if (!check.ok) return { ok: false as const, error: check.reason };
 
       const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
@@ -195,26 +226,39 @@ router.post(
       const existingByCpf = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
       if (existingByCpf) return { ok: false as const, error: 'cpf_already_used' as const };
 
-      const enrollmentCode = await uniqueEnrollmentCode((code) =>
-        tx.student.findUnique({ where: { enrollmentCode: code } }).then((found) => found !== null),
-      );
+      // Promove o aluno experimental (criado na etapa "experimental_agendada")
+      // a matriculado; se o lead pulou a experimental, cria o aluno agora.
+      const enrollmentData = {
+        cpfHash: cpfHashValue,
+        cpfMasked: maskCpf(cpfDigits),
+        unitId: input.unitId,
+        type: 'matriculado' as const,
+        packageName: pkg.name,
+        creditBalance: pkg.classCount,
+        active: true,
+      };
 
-      const student = await tx.student.create({
-        data: {
-          leadId: lead.id,
-          name: lead.name,
-          whatsapp: lead.whatsapp,
-          email: lead.email,
-          cpfHash: cpfHashValue,
-          cpfMasked: maskCpf(cpfDigits),
-          enrollmentCode,
-          unitId: input.unitId,
-          packageName: pkg.name,
-          creditBalance: pkg.classCount,
-          active: true,
-        },
-        include: { unit: { select: { name: true } } },
-      });
+      const student = lead.student
+        ? await tx.student.update({
+            where: { id: lead.student.id },
+            data: enrollmentData,
+            include: { unit: { select: { name: true } } },
+          })
+        : await tx.student.create({
+            data: {
+              leadId: lead.id,
+              name: lead.name,
+              whatsapp: lead.whatsapp,
+              email: lead.email,
+              enrollmentCode: await uniqueEnrollmentCode((code) =>
+                tx.student
+                  .findUnique({ where: { enrollmentCode: code } })
+                  .then((found) => found !== null),
+              ),
+              ...enrollmentData,
+            },
+            include: { unit: { select: { name: true } } },
+          });
 
       const updatedLead = await tx.lead.update({
         where: { id: lead.id },
@@ -227,9 +271,13 @@ router.post(
           actorType: 'user',
           entityType: 'student',
           entityId: student.id,
-          action: 'lead.converted',
+          action: lead.student ? 'student.enrolled' : 'lead.converted',
           before: { leadId: lead.id, stage: lead.stage },
-          after: { studentId: student.id, enrollmentCode, packageName: pkg.name },
+          after: {
+            studentId: student.id,
+            enrollmentCode: student.enrollmentCode,
+            packageName: pkg.name,
+          },
         },
       });
 

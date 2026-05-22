@@ -64,6 +64,8 @@ router.post(
       where: {
         cpfHash: hashCpf(input.cpf),
         active: true,
+        // O portal e exclusivo de alunos matriculados.
+        type: 'matriculado',
       },
     });
 
@@ -106,6 +108,19 @@ router.post(
     const studentId = await consumeMagicLink(input.token);
     if (!studentId) {
       throw new ApiError(401, 'invalid_magic_link', 'Link invalido ou expirado.');
+    }
+
+    // Defesa em profundidade: o portal e exclusivo de alunos matriculados.
+    const student = await prisma.student.findFirst({
+      where: { id: studentId, active: true, type: 'matriculado' },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new ApiError(
+        403,
+        'portal_unavailable',
+        'Portal disponivel apenas para alunos matriculados.',
+      );
     }
 
     const sessionId = await createPortalSession(studentId);

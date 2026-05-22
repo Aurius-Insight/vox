@@ -1,11 +1,14 @@
 export type ConversionCheck = { ok: true } | { ok: false; reason: 'already_enrolled' };
 
 /**
- * Um lead so pode ser convertido em aluno uma vez. O vinculo Student.leadId e
- * unico no banco; aqui validamos antes para devolver um erro claro.
+ * Um lead pode ser convertido se ainda nao tem aluno OU se o aluno existente e
+ * experimental — nesse caso a conversao apenas o "promove" a matriculado. So
+ * bloqueia quando ja existe um aluno matriculado vinculado.
  */
-export function canConvertLead(input: { hasStudent: boolean }): ConversionCheck {
-  if (input.hasStudent) return { ok: false, reason: 'already_enrolled' };
+export function canConvertLead(input: {
+  studentType?: 'experimental' | 'matriculado' | null;
+}): ConversionCheck {
+  if (input.studentType === 'matriculado') return { ok: false, reason: 'already_enrolled' };
   return { ok: true };
 }
 
