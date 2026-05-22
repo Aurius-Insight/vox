@@ -158,6 +158,57 @@ router.post(
   }),
 );
 
+const SearchQuerySchema = z.object({
+  q: z.string().trim().min(2).max(80),
+});
+
+// Busca de alunos por nome ou matricula — usada para agendar alunos em aulas
+// (pagina de Presenca). Acessivel tambem ao professor. Registrada antes de
+// "/:studentId" para nao ser capturada como id.
+router.get(
+  '/search',
+  requireAuth,
+  requireRole('diretor', 'coordenacao', 'professor'),
+  asyncHandler(async (req, res) => {
+    const parsed = SearchQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.json({ data: [] });
+      return;
+    }
+
+    const students = await prisma.student.findMany({
+      where: {
+        active: true,
+        OR: [
+          { name: { contains: parsed.data.q, mode: 'insensitive' } },
+          { enrollmentCode: { contains: parsed.data.q, mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { name: 'asc' },
+      take: 20,
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        enrollmentCode: true,
+        creditBalance: true,
+        unit: { select: { name: true } },
+      },
+    });
+
+    res.json({
+      data: students.map((student) => ({
+        id: student.id,
+        name: student.name,
+        type: student.type,
+        enrollmentCode: student.enrollmentCode,
+        creditBalance: student.creditBalance,
+        unitName: student.unit?.name ?? null,
+      })),
+    });
+  }),
+);
+
 router.get(
   '/:studentId',
   requireAuth,
