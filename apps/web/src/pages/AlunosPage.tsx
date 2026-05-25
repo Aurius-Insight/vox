@@ -1,9 +1,17 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
-import type { Lead, Package, StudentDetail, StudentSummary, Unit } from '../api/types';
+import type {
+  Lead,
+  Package,
+  StudentDetail,
+  StudentHistory,
+  StudentSummary,
+  Unit,
+} from '../api/types';
 import { formatDate, formatDateTime } from '../lib/format';
 import { Modal } from '../components/Modal';
+import { HistoryKpis, HistoryTimeline } from '../components/StudentHistoryView';
 import { useToast } from '../components/ToastProvider';
 
 type StudentForm = {
@@ -58,6 +66,9 @@ export function AlunosPage() {
   const [convertForm, setConvertForm] = useState({ cpf: '', unitId: '', packageId: '' });
   const [convertSaving, setConvertSaving] = useState(false);
   const [linkPendingId, setLinkPendingId] = useState<string>();
+  const [activeTab, setActiveTab] = useState<'cadastro' | 'historico'>('cadastro');
+  const [history, setHistory] = useState<StudentHistory>();
+  const [historyLoading, setHistoryLoading] = useState(false);
   const toast = useToast();
   // setError/setInfo encaminham para o sistema de toasts (mensagem vazia = no-op).
   const setError = (message: string) => {
@@ -160,6 +171,8 @@ export function AlunosPage() {
   async function openStudent(id: string) {
     setLoadingDetail(true);
     setError('');
+    setActiveTab('cadastro');
+    setHistory(undefined);
     try {
       const response = await api<{ data: StudentDetail }>(`/api/students/${id}`);
       setSelected(response.data);
@@ -177,6 +190,38 @@ export function AlunosPage() {
     } finally {
       setLoadingDetail(false);
     }
+  }
+
+  // Historico do aluno carrega sob demanda quando a aba e acessada — evita
+  // request extra pra quem so vai operar cadastro/renovacao.
+  async function loadHistory(studentId: string, since?: string) {
+    setHistoryLoading(true);
+    try {
+      const path = since
+        ? `/api/students/${studentId}/history?since=${encodeURIComponent(since)}`
+        : `/api/students/${studentId}/history`;
+      const response = await api<{ data: StudentHistory }>(path);
+      setHistory(response.data);
+    } catch {
+      setError('Nao foi possivel carregar o historico.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  function openHistoryTab() {
+    setActiveTab('historico');
+    if (selected && !history && !historyLoading) {
+      void loadHistory(selected.id);
+    }
+  }
+
+  // Ver mais: amplia a janela em +90 dias a partir do `since` atual.
+  function loadOlderHistory() {
+    if (!selected || !history) return;
+    const currentSince = new Date(history.since);
+    const olderSince = new Date(currentSince.getTime() - 90 * 24 * 60 * 60 * 1000);
+    void loadHistory(selected.id, olderSince.toISOString());
   }
 
   async function handleRenew(event: FormEvent) {
@@ -612,7 +657,47 @@ export function AlunosPage() {
                 )}
               </div>
 
-              {canOperate && (
+              <nav className="detail-tabs" aria-label="Secoes do aluno">
+                <button
+                  type="button"
+                  className={activeTab === 'cadastro' ? 'is-active' : ''}
+                  onClick={() => setActiveTab('cadastro')}
+                >
+                  Cadastro
+                </button>
+                <button
+                  type="button"
+                  className={activeTab === 'historico' ? 'is-active' : ''}
+                  onClick={openHistoryTab}
+                >
+                  Historico
+                </button>
+              </nav>
+
+              {activeTab === 'historico' && (
+                <div className="stack">
+                  {historyLoading && !history && (
+                    <p className="muted-text">Carregando historico...</p>
+                  )}
+                  {history && (
+                    <>
+                      <HistoryKpis history={history} />
+                      <HistoryTimeline events={history.timeline} />
+                      <div className="grid-form-actions">
+                        <button
+                          type="button"
+                          onClick={loadOlderHistory}
+                          disabled={historyLoading}
+                        >
+                          {historyLoading ? 'Carregando...' : 'Ver mais (+90 dias)'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'cadastro' && canOperate && (
                 <div>
                   <h3>Editar dados</h3>
                   <p className="muted-text">
@@ -667,7 +752,7 @@ export function AlunosPage() {
                 </div>
               )}
 
-              {canOperate && selected.type === 'experimental' && (
+              {activeTab === 'cadastro' && canOperate && selected.type === 'experimental' && (
                 <div>
                   <h3>Matricular aluno</h3>
                   <p className="muted-text">
@@ -678,7 +763,7 @@ export function AlunosPage() {
                 </div>
               )}
 
-              {canOperate && selected.type === 'matriculado' && (
+              {activeTab === 'cadastro' && canOperate && selected.type === 'matriculado' && (
                 <div>
                   <h3>Renovar pacote</h3>
                   <p className="muted-text">
@@ -711,40 +796,44 @@ export function AlunosPage() {
                 </div>
               )}
 
-              <div>
-                <h3>Agendamentos</h3>
-                {selected.bookings.length === 0 && (
-                  <p className="muted-text">Nenhum agendamento.</p>
-                )}
-                <ul className="history-list">
-                  {selected.bookings.map((booking) => (
-                    <li key={booking.id}>
-                      <span>{booking.classLabel}</span>
-                      <span>
-                        {formatDateTime(booking.startsAt)} - {booking.type} - {booking.status}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {activeTab === 'cadastro' && (
+                <>
+                  <div>
+                    <h3>Agendamentos</h3>
+                    {selected.bookings.length === 0 && (
+                      <p className="muted-text">Nenhum agendamento.</p>
+                    )}
+                    <ul className="history-list">
+                      {selected.bookings.map((booking) => (
+                        <li key={booking.id}>
+                          <span>{booking.classLabel}</span>
+                          <span>
+                            {formatDateTime(booking.startsAt)} - {booking.type} - {booking.status}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
 
-              <div>
-                <h3>Presencas</h3>
-                {selected.attendances.length === 0 && (
-                  <p className="muted-text">Nenhuma presenca registrada.</p>
-                )}
-                <ul className="history-list">
-                  {selected.attendances.map((attendance) => (
-                    <li key={attendance.id}>
-                      <span>{attendance.classLabel}</span>
-                      <span>
-                        {formatDate(attendance.startsAt)} - {attendance.status}
-                        {attendance.creditConsumed ? ' - credito consumido' : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                  <div>
+                    <h3>Presencas</h3>
+                    {selected.attendances.length === 0 && (
+                      <p className="muted-text">Nenhuma presenca registrada.</p>
+                    )}
+                    <ul className="history-list">
+                      {selected.attendances.map((attendance) => (
+                        <li key={attendance.id}>
+                          <span>{attendance.classLabel}</span>
+                          <span>
+                            {formatDate(attendance.startsAt)} - {attendance.status}
+                            {attendance.creditConsumed ? ' - credito consumido' : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </aside>

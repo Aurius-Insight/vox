@@ -140,6 +140,57 @@ export type StudentDetail = StudentSummary & {
   attendances: StudentAttendance[];
 };
 
+export type StudentKpis = {
+  presenceRate: number;
+  noShowRate: number;
+  lifetimeClasses: number;
+  daysSinceLastClass: number | null;
+  nextClassAt: string | null;
+  averageClassesPerMonth: number;
+};
+
+export type StudentTimelineEvent =
+  | { type: 'lead_created'; at: string; data: { campaign: string | null; source: string } }
+  | { type: 'student_created'; at: string }
+  | {
+      type: 'booking_created';
+      at: string;
+      data: {
+        bookingId: string;
+        kind: 'regular' | 'experimental';
+        classLabel: string;
+        classStartsAt: string;
+      };
+    }
+  | {
+      type: 'booking_canceled';
+      at: string;
+      data: { bookingId: string; classLabel: string; classStartsAt: string };
+    }
+  | {
+      type: 'attendance';
+      at: string;
+      data: {
+        attendanceId: string;
+        status: 'presente' | 'no_show';
+        creditConsumed: boolean;
+        classLabel: string;
+        classStartsAt: string;
+      };
+    }
+  | {
+      type: 'package_renewed';
+      at: string;
+      data: { packageName: string | null; classesAdded: number };
+    };
+
+export type StudentHistory = {
+  windowDays: number;
+  since: string;
+  kpis: StudentKpis;
+  timeline: StudentTimelineEvent[];
+};
+
 export type Unit = {
   id: string;
   name: string;

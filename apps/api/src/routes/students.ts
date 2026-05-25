@@ -7,6 +7,13 @@ import { ApiError, asyncHandler, maskCpf, maskPhone } from '../lib/http.js';
 import { hashCpf, normalizeCpf } from '../lib/cpf.js';
 import { uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
+import {
+  buildStudentTimeline,
+  computeStudentKpis,
+  type AttendanceSnapshot,
+  type BookingSnapshot,
+  type RenewalSnapshot,
+} from '../domain/student-history.js';
 import { createMagicLink, MAGIC_LINK_TTL_SECONDS } from '../lib/magic-link.js';
 
 const router = Router();
@@ -296,6 +303,175 @@ router.get(
           startsAt: attendance.classSession.startsAt.toISOString(),
           markedAt: attendance.markedAt.toISOString(),
         })),
+      },
+    });
+  }),
+);
+
+const HistoryQuerySchema = z.object({
+  since: z.string().datetime().optional(),
+});
+
+const HISTORY_DEFAULT_WINDOW_DAYS = 90;
+const HISTORY_MAX_EVENTS_PER_TYPE = 500;
+
+// Historico individual do aluno: KPIs (janela configuravel, default 90 dias)
+// + timeline unificada (cadastro, lead, agendamentos, presencas, renovacoes).
+// Renovacoes vem do AuditLog (`student.renewed`), nao ha schema dedicado.
+router.get(
+  '/:studentId/history',
+  requireAuth,
+  requireRole(...VIEW_ROLES),
+  asyncHandler(async (req, res) => {
+    const query = HistoryQuerySchema.parse(req.query);
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+    const now = new Date();
+    const since = query.since
+      ? new Date(query.since)
+      : new Date(now.getTime() - HISTORY_DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const windowDays = Math.max(
+      1,
+      Math.ceil((now.getTime() - since.getTime()) / (24 * 60 * 60 * 1000)),
+    );
+
+    const student = await prisma.student.findUnique({
+      where: { id: req.params.studentId },
+      include: {
+        lead: { select: { createdAt: true, campaign: true, source: true } },
+      },
+    });
+
+    if (!student) throw new ApiError(404, 'student_not_found', 'Aluno nao encontrado.');
+    if (unitScope && student.unitId !== unitScope) {
+      throw new ApiError(403, 'unit_scope', 'Aluno fora da sua unidade.');
+    }
+
+    const sessionInclude = {
+      classSession: {
+        select: {
+          startsAt: true,
+          isGuest: true,
+          subject: { select: { name: true } },
+        },
+      },
+    } as const;
+
+    const [
+      bookingsInWindow,
+      attendancesInWindow,
+      lifetimePresentCount,
+      lastAttendance,
+      nextBooking,
+      renewalLogs,
+    ] = await Promise.all([
+      prisma.classBooking.findMany({
+        where: {
+          studentId: student.id,
+          OR: [{ createdAt: { gte: since } }, { canceledAt: { gte: since } }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: HISTORY_MAX_EVENTS_PER_TYPE,
+        include: sessionInclude,
+      }),
+      prisma.attendance.findMany({
+        where: { studentId: student.id, markedAt: { gte: since } },
+        orderBy: { markedAt: 'desc' },
+        take: HISTORY_MAX_EVENTS_PER_TYPE,
+        include: sessionInclude,
+      }),
+      prisma.attendance.count({
+        where: { studentId: student.id, status: 'presente' },
+      }),
+      prisma.attendance.findFirst({
+        where: { studentId: student.id },
+        orderBy: { markedAt: 'desc' },
+        select: { markedAt: true },
+      }),
+      prisma.classBooking.findFirst({
+        where: {
+          studentId: student.id,
+          status: 'agendado',
+          classSession: { startsAt: { gte: now }, canceledAt: null },
+        },
+        orderBy: { classSession: { startsAt: 'asc' } },
+        select: { classSession: { select: { startsAt: true } } },
+      }),
+      prisma.auditLog.findMany({
+        where: {
+          entityType: 'student',
+          entityId: student.id,
+          action: 'student.renewed',
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: HISTORY_MAX_EVENTS_PER_TYPE,
+        select: { createdAt: true, after: true },
+      }),
+    ]);
+
+    const classLabel = (session: { isGuest: boolean; subject: { name: string } | null }) =>
+      session.isGuest ? 'Professor convidado' : (session.subject?.name ?? 'Sem materia');
+
+    const bookings: BookingSnapshot[] = bookingsInWindow.map((booking) => ({
+      id: booking.id,
+      createdAt: booking.createdAt,
+      canceledAt: booking.canceledAt,
+      type: booking.type,
+      classLabel: classLabel(booking.classSession),
+      classStartsAt: booking.classSession.startsAt,
+    }));
+
+    const attendances: AttendanceSnapshot[] = attendancesInWindow.map((attendance) => ({
+      id: attendance.id,
+      markedAt: attendance.markedAt,
+      status: attendance.status,
+      creditConsumed: attendance.creditConsumed,
+      classLabel: classLabel(attendance.classSession),
+      classStartsAt: attendance.classSession.startsAt,
+    }));
+
+    const renewals: RenewalSnapshot[] = renewalLogs.map((log) => {
+      const after = (log.after ?? {}) as { packageName?: string | null; classesAdded?: number };
+      return {
+        at: log.createdAt,
+        packageName: after.packageName ?? null,
+        classesAdded: typeof after.classesAdded === 'number' ? after.classesAdded : 0,
+      };
+    });
+
+    const kpis = computeStudentKpis({
+      now,
+      windowDays,
+      attendancesInWindow: attendancesInWindow.map((a) => ({
+        markedAt: a.markedAt,
+        status: a.status,
+      })),
+      lastAttendanceAt: lastAttendance?.markedAt ?? null,
+      lifetimePresentCount,
+      nextBookingAt: nextBooking?.classSession.startsAt ?? null,
+    });
+
+    const timeline = buildStudentTimeline({
+      now,
+      student: { createdAt: student.createdAt },
+      lead: student.lead
+        ? {
+            createdAt: student.lead.createdAt,
+            campaign: student.lead.campaign,
+            source: student.lead.source,
+          }
+        : null,
+      bookings,
+      attendances,
+      renewals,
+    });
+
+    res.json({
+      data: {
+        windowDays,
+        since: since.toISOString(),
+        kpis,
+        timeline,
       },
     });
   }),
