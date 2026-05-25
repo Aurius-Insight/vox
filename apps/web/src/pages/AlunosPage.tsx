@@ -18,6 +18,7 @@ type StudentForm = {
   name: string;
   whatsapp: string;
   email: string;
+  type: 'matriculado' | 'experimental';
   cpf: string;
   unitId: string;
   packageId: string;
@@ -27,6 +28,21 @@ const EMPTY_FORM: StudentForm = {
   name: '',
   whatsapp: '',
   email: '',
+  type: 'matriculado',
+  cpf: '',
+  unitId: '',
+  packageId: '',
+};
+
+type ConvertForm = {
+  type: 'matriculado' | 'experimental';
+  cpf: string;
+  unitId: string;
+  packageId: string;
+};
+
+const EMPTY_CONVERT_FORM: ConvertForm = {
+  type: 'matriculado',
   cpf: '',
   unitId: '',
   packageId: '',
@@ -63,7 +79,7 @@ export function AlunosPage() {
   const [leadResults, setLeadResults] = useState<Lead[]>([]);
   const [leadSearching, setLeadSearching] = useState(false);
   const [convertLead, setConvertLead] = useState<Lead>();
-  const [convertForm, setConvertForm] = useState({ cpf: '', unitId: '', packageId: '' });
+  const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT_FORM);
   const [convertSaving, setConvertSaving] = useState(false);
   const [linkPendingId, setLinkPendingId] = useState<string>();
   const [activeTab, setActiveTab] = useState<'cadastro' | 'historico'>('cadastro');
@@ -289,7 +305,12 @@ export function AlunosPage() {
     setInfo('');
     // Tenta casar a unidade de interesse do lead (texto livre) com uma real.
     const matchedUnit = units.find((unit) => unit.name === lead.unitInterest);
-    setConvertForm({ cpf: '', unitId: matchedUnit?.id ?? '', packageId: '' });
+    setConvertForm({
+      type: 'matriculado',
+      cpf: '',
+      unitId: matchedUnit?.id ?? '',
+      packageId: '',
+    });
   }
 
   /**
@@ -305,21 +326,37 @@ export function AlunosPage() {
     setConvertSaving(true);
 
     try {
+      const body: Record<string, string> = {
+        type: convertForm.type,
+        cpf: convertForm.cpf,
+        unitId: convertForm.unitId,
+      };
+      // Pacote so vai no corpo quando matriculando — experimental nao paga.
+      if (convertForm.type === 'matriculado' && convertForm.packageId) {
+        body.packageId = convertForm.packageId;
+      }
       const response = await api<{
-        data: { student: { name: string; enrollmentCode: string; packageName: string } };
+        data: {
+          student: {
+            name: string;
+            enrollmentCode: string;
+            packageName: string | null;
+            type: 'matriculado' | 'experimental';
+          };
+        };
       }>(`/api/leads/${convertLead.id}/convert`, {
         method: 'POST',
-        body: JSON.stringify({
-          cpf: convertForm.cpf,
-          unitId: convertForm.unitId,
-          packageId: convertForm.packageId,
-        }),
+        body: JSON.stringify(body),
       });
-      const { name, enrollmentCode, packageName } = response.data.student;
-      setInfo(`${name} matriculado a partir do lead. Matricula ${enrollmentCode} - ${packageName}.`);
+      const { name, enrollmentCode, packageName, type } = response.data.student;
+      setInfo(
+        type === 'matriculado'
+          ? `${name} matriculado a partir do lead. Matricula ${enrollmentCode} - ${packageName}.`
+          : `${name} virou aluno experimental. Matricula ${enrollmentCode}.`,
+      );
       setConvertLead(undefined);
       setShowConvert(false);
-      setConvertForm({ cpf: '', unitId: '', packageId: '' });
+      setConvertForm(EMPTY_CONVERT_FORM);
       setLeadSearch('');
       setLeadResults([]);
       await load();
@@ -337,21 +374,26 @@ export function AlunosPage() {
     setSaving(true);
 
     try {
-      const response = await api<{ data: { name: string; enrollmentCode: string } }>(
-        '/api/students',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            name: form.name,
-            whatsapp: form.whatsapp,
-            email: form.email || undefined,
-            cpf: form.cpf,
-            unitId: form.unitId,
-            packageId: form.packageId,
-          }),
-        },
-      );
-      setInfo(`${response.data.name} cadastrado. Matricula ${response.data.enrollmentCode}.`);
+      // Experimental: nao manda cpf nem packageId (a API trata como opcional).
+      const body: Record<string, string> = {
+        name: form.name,
+        whatsapp: form.whatsapp,
+        type: form.type,
+        unitId: form.unitId,
+      };
+      if (form.email) body.email = form.email;
+      if (form.type === 'matriculado') {
+        body.cpf = form.cpf;
+        body.packageId = form.packageId;
+      }
+      const response = await api<{
+        data: { name: string; enrollmentCode: string; type: 'matriculado' | 'experimental' };
+      }>('/api/students', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      const label = response.data.type === 'matriculado' ? 'cadastrado' : 'cadastrado (experimental)';
+      setInfo(`${response.data.name} ${label}. Matricula ${response.data.enrollmentCode}.`);
       setForm(EMPTY_FORM);
       setShowCreate(false);
       await load();
@@ -390,9 +432,24 @@ export function AlunosPage() {
       {canCreate && showCreate && (
         <Modal title="Novo aluno" onClose={() => setShowCreate(false)}>
           <p className="muted-text">
-            Cadastro avulso (sem lead). O saldo de aulas vem da quantidade do pacote.
+            {form.type === 'matriculado'
+              ? 'Cadastro avulso (sem lead). O saldo de aulas vem da quantidade do pacote.'
+              : 'Aluno experimental: sem pacote, sem CPF obrigatorio — para agendar aula trial.'}
           </p>
           <form className="grid-form" onSubmit={handleCreate}>
+            <label>
+              Tipo
+              <select
+                value={form.type}
+                onChange={(event) =>
+                  updateField('type', event.target.value as StudentForm['type'])
+                }
+                required
+              >
+                <option value="matriculado">Matriculado</option>
+                <option value="experimental">Experimental</option>
+              </select>
+            </label>
             <label>
               Nome
               <input
@@ -417,15 +474,17 @@ export function AlunosPage() {
                 onChange={(event) => updateField('email', event.target.value)}
               />
             </label>
-            <label>
-              CPF
-              <input
-                value={form.cpf}
-                onChange={(event) => updateField('cpf', event.target.value)}
-                inputMode="numeric"
-                required
-              />
-            </label>
+            {form.type === 'matriculado' && (
+              <label>
+                CPF
+                <input
+                  value={form.cpf}
+                  onChange={(event) => updateField('cpf', event.target.value)}
+                  inputMode="numeric"
+                  required
+                />
+              </label>
+            )}
             <label>
               Unidade
               <select
@@ -441,21 +500,23 @@ export function AlunosPage() {
                 ))}
               </select>
             </label>
-            <label>
-              Pacote
-              <select
-                value={form.packageId}
-                onChange={(event) => updateField('packageId', event.target.value)}
-                required
-              >
-                <option value="">Selecione</option>
-                {packages.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} ({item.classCount} aulas)
-                  </option>
-                ))}
-              </select>
-            </label>
+            {form.type === 'matriculado' && (
+              <label>
+                Pacote
+                <select
+                  value={form.packageId}
+                  onChange={(event) => updateField('packageId', event.target.value)}
+                  required
+                >
+                  <option value="">Selecione</option>
+                  {packages.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} ({item.classCount} aulas)
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="grid-form-actions">
               <button type="submit" disabled={saving}>
                 {saving ? 'Salvando...' : 'Cadastrar aluno'}
@@ -468,8 +529,9 @@ export function AlunosPage() {
       {canOperate && showConvert && (
         <Modal title="Converter lead em aluno" onClose={() => setShowConvert(false)}>
           <p className="muted-text">
-            Busca um contato do pipeline de Vendas e matricula. Mantem o vinculo com o
-            lead (origem/campanha) e move ele para "matriculado".
+            Busca um contato do pipeline de Vendas. Matriculado: vende pacote e o lead
+            sai do funil. Experimental: cria o aluno com CPF mas sem pacote — o lead
+            vai para "experimental_agendada".
           </p>
           <label>
             Buscar lead
@@ -507,6 +569,22 @@ export function AlunosPage() {
               </p>
               <form className="grid-form" onSubmit={handleConvertLead}>
                 <label>
+                  Tipo
+                  <select
+                    value={convertForm.type}
+                    onChange={(event) =>
+                      setConvertForm((current) => ({
+                        ...current,
+                        type: event.target.value as ConvertForm['type'],
+                      }))
+                    }
+                    required
+                  >
+                    <option value="matriculado">Matriculado</option>
+                    <option value="experimental">Experimental</option>
+                  </select>
+                </label>
+                <label>
                   CPF
                   <input
                     value={convertForm.cpf}
@@ -534,26 +612,32 @@ export function AlunosPage() {
                     ))}
                   </select>
                 </label>
-                <label>
-                  Pacote
-                  <select
-                    value={convertForm.packageId}
-                    onChange={(event) =>
-                      setConvertForm((current) => ({ ...current, packageId: event.target.value }))
-                    }
-                    required
-                  >
-                    <option value="">Selecione</option>
-                    {packages.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name} ({item.classCount} aulas)
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {convertForm.type === 'matriculado' && (
+                  <label>
+                    Pacote
+                    <select
+                      value={convertForm.packageId}
+                      onChange={(event) =>
+                        setConvertForm((current) => ({ ...current, packageId: event.target.value }))
+                      }
+                      required
+                    >
+                      <option value="">Selecione</option>
+                      {packages.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} ({item.classCount} aulas)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <div className="grid-form-actions">
                   <button type="submit" disabled={convertSaving}>
-                    {convertSaving ? 'Convertendo...' : 'Converter em aluno'}
+                    {convertSaving
+                      ? 'Convertendo...'
+                      : convertForm.type === 'matriculado'
+                        ? 'Matricular aluno'
+                        : 'Cadastrar como experimental'}
                   </button>
                   <button
                     type="button"

@@ -20,14 +20,37 @@ const router = Router();
 
 const VIEW_ROLES = ['diretor', 'coordenacao'] as const;
 
-const CreateStudentSchema = z.object({
-  name: z.string().min(2).max(120),
-  whatsapp: z.string().min(8).max(30),
-  email: z.string().email().max(160).optional(),
-  cpf: z.string().min(11).max(14),
-  unitId: z.string().min(1),
-  packageId: z.string().min(1),
-});
+// Aluno experimental: CPF e pacote ficam opcionais (espelha o experimental
+// criado pelo lead, que tambem nao tem CPF nem saldo). Matriculado exige
+// os dois — sao a chave de identidade e o saldo de aulas.
+const CreateStudentSchema = z
+  .object({
+    name: z.string().min(2).max(120),
+    whatsapp: z.string().min(8).max(30),
+    email: z.string().email().max(160).optional(),
+    type: z.enum(['matriculado', 'experimental']).default('matriculado'),
+    cpf: z.string().min(11).max(14).optional(),
+    unitId: z.string().min(1),
+    packageId: z.string().min(1).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type === 'matriculado') {
+      if (!data.cpf) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['cpf'],
+          message: 'CPF e obrigatorio para aluno matriculado.',
+        });
+      }
+      if (!data.packageId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['packageId'],
+          message: 'Pacote e obrigatorio para aluno matriculado.',
+        });
+      }
+    }
+  });
 
 const RenewSchema = z.object({
   packageId: z.string().min(1),
@@ -86,9 +109,15 @@ router.post(
   requireRole('diretor'),
   asyncHandler(async (req, res) => {
     const input = CreateStudentSchema.parse(req.body);
-    const cpfDigits = normalizeCpf(input.cpf);
-    if (cpfDigits.length !== 11) {
-      throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
+
+    // CPF so e validado/persistido pra matriculado. Experimental espelha o
+    // criado pelo fluxo do lead — sem CPF, sem hash, sem saldo.
+    let cpfDigits: string | null = null;
+    if (input.type === 'matriculado') {
+      cpfDigits = normalizeCpf(input.cpf!);
+      if (cpfDigits.length !== 11) {
+        throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
+      }
     }
 
     const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
@@ -100,12 +129,25 @@ router.post(
       const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
       if (!unit) return { ok: false as const, error: 'unit_not_found' as const };
 
-      const pkg = await tx.package.findFirst({ where: { id: input.packageId, active: true } });
-      if (!pkg) return { ok: false as const, error: 'package_not_found' as const };
+      let packageName: string | null = null;
+      let creditBalance = 0;
+      if (input.type === 'matriculado') {
+        const pkg = await tx.package.findFirst({
+          where: { id: input.packageId!, active: true },
+        });
+        if (!pkg) return { ok: false as const, error: 'package_not_found' as const };
+        packageName = pkg.name;
+        creditBalance = pkg.classCount;
+      }
 
-      const cpfHashValue = hashCpf(cpfDigits);
-      const existing = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
-      if (existing) return { ok: false as const, error: 'cpf_already_used' as const };
+      let cpfHashValue: string | null = null;
+      let cpfMaskedValue: string | null = null;
+      if (cpfDigits) {
+        cpfHashValue = hashCpf(cpfDigits);
+        const existing = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
+        if (existing) return { ok: false as const, error: 'cpf_already_used' as const };
+        cpfMaskedValue = maskCpf(cpfDigits) ?? null;
+      }
 
       const enrollmentCode = await uniqueEnrollmentCode((code) =>
         tx.student.findUnique({ where: { enrollmentCode: code } }).then((found) => found !== null),
@@ -117,11 +159,12 @@ router.post(
           whatsapp: input.whatsapp.replace(/\D/g, ''),
           email: input.email,
           cpfHash: cpfHashValue,
-          cpfMasked: maskCpf(cpfDigits),
+          cpfMasked: cpfMaskedValue,
           enrollmentCode,
           unitId: input.unitId,
-          packageName: pkg.name,
-          creditBalance: pkg.classCount,
+          type: input.type,
+          packageName,
+          creditBalance,
           active: true,
         },
         include: { unit: { select: { name: true } } },
@@ -134,7 +177,7 @@ router.post(
           entityType: 'student',
           entityId: student.id,
           action: 'student.created',
-          after: { enrollmentCode, packageName: pkg.name, unitId: input.unitId },
+          after: { enrollmentCode, type: input.type, packageName, unitId: input.unitId },
         },
       });
 
@@ -155,6 +198,7 @@ router.post(
       data: {
         id: result.student.id,
         name: result.student.name,
+        type: result.student.type,
         enrollmentCode: result.student.enrollmentCode,
         unitId: result.student.unitId,
         unitName: result.student.unit?.name ?? null,

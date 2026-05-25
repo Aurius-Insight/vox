@@ -42,11 +42,27 @@ const UpdateStageSchema = z.object({
   stage: z.enum(stages as [LeadStage, ...LeadStage[]]),
 });
 
-const ConvertLeadSchema = z.object({
-  cpf: z.string().min(11).max(14),
-  unitId: z.string().min(1),
-  packageId: z.string().min(1),
-});
+// Conversao pode terminar em aluno matriculado (vende pacote) ou
+// experimental (vira aluno-aluno-base sem vender pacote, fica em
+// experimental_agendada). CPF e sempre coletado — operador esta com a
+// pessoa na frente; e o que diferencia o cadastro avulso do experimental
+// criado pelo webhook do lead.
+const ConvertLeadSchema = z
+  .object({
+    type: z.enum(['matriculado', 'experimental']).default('matriculado'),
+    cpf: z.string().min(11).max(14),
+    unitId: z.string().min(1),
+    packageId: z.string().min(1).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.type === 'matriculado' && !data.packageId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['packageId'],
+        message: 'Pacote e obrigatorio para matricular.',
+      });
+    }
+  });
 
 const conversionErrorMap: Record<string, { status: number; message: string }> = {
   lead_not_found: { status: 404, message: 'Lead nao encontrado.' },
@@ -219,22 +235,38 @@ router.post(
       const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
       if (!unit) return { ok: false as const, error: 'unit_not_found' as const };
 
-      const pkg = await tx.package.findFirst({ where: { id: input.packageId, active: true } });
-      if (!pkg) return { ok: false as const, error: 'package_not_found' as const };
+      // Pacote e cobrado e creditBalance sobe so na conversao para matriculado.
+      // Conversao para experimental cria/atualiza o aluno com CPF mas sem
+      // pacote/saldo — equivalente ao lead-driven experimental, com a
+      // diferenca de que aqui o operador tem o CPF na mao.
+      let packageName: string | null = null;
+      let creditBalance = 0;
+      if (input.type === 'matriculado') {
+        const pkg = await tx.package.findFirst({
+          where: { id: input.packageId!, active: true },
+        });
+        if (!pkg) return { ok: false as const, error: 'package_not_found' as const };
+        packageName = pkg.name;
+        creditBalance = pkg.classCount;
+      }
 
       const cpfHashValue = hashCpf(cpfDigits);
       const existingByCpf = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
-      if (existingByCpf) return { ok: false as const, error: 'cpf_already_used' as const };
+      // Permite reusar o CPF se ja existe um aluno ligado ao MESMO lead
+      // (operador apertando converter de novo); caso contrario, dedup.
+      if (existingByCpf && existingByCpf.id !== (lead.student?.id ?? null)) {
+        return { ok: false as const, error: 'cpf_already_used' as const };
+      }
 
-      // Promove o aluno experimental (criado na etapa "experimental_agendada")
-      // a matriculado; se o lead pulou a experimental, cria o aluno agora.
+      // Atualiza o aluno-experimental existente (criado em "experimental_agendada")
+      // OU cria do zero se o lead pulou a etapa.
       const enrollmentData = {
         cpfHash: cpfHashValue,
         cpfMasked: maskCpf(cpfDigits),
         unitId: input.unitId,
-        type: 'matriculado' as const,
-        packageName: pkg.name,
-        creditBalance: pkg.classCount,
+        type: input.type,
+        packageName,
+        creditBalance,
         active: true,
       };
 
@@ -260,9 +292,14 @@ router.post(
             include: { unit: { select: { name: true } } },
           });
 
+      // Stage do lead acompanha o desfecho: matriculado sai do funil,
+      // experimental fica em experimental_agendada (continua no pipeline
+      // pra ser matriculado depois).
+      const nextStage =
+        input.type === 'matriculado' ? ('matriculado' as const) : ('experimental_agendada' as const);
       const updatedLead = await tx.lead.update({
         where: { id: lead.id },
-        data: { stage: 'matriculado' },
+        data: { stage: nextStage },
       });
 
       await tx.auditLog.create({
@@ -276,7 +313,8 @@ router.post(
           after: {
             studentId: student.id,
             enrollmentCode: student.enrollmentCode,
-            packageName: pkg.name,
+            type: input.type,
+            packageName,
           },
         },
       });
