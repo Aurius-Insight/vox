@@ -1,283 +1,235 @@
-# Deploy — fase de teste em producao (Render)
+# Deploy — VPS proprio com docker compose
 
-Guia pratico, na ordem em que se faz, para subir o MVP da Vox RJ para um
-ambiente acessivel por URL publica.
+Guia operacional do deploy real do MVP. A stack roda em VPS atras do
+Traefik, todos os servicos sobem com `docker-compose.prod.yml`:
 
-> **Alternativa**: [`DEPLOY_VERCEL.md`](./DEPLOY_VERCEL.md) cobre o mesmo
-> deploy usando **Vercel + Supabase** (2 fornecedores em vez de 1).
-> Trade-off principal: cold start de 2-5s no portal do aluno apos longa
-> pausa. Use um OU outro, nao os dois ao mesmo tempo.
+- **postgres** (Postgres 16) — banco
+- **redis** (Redis 7) — sessoes, magic link, rate limit
+- **api** (`Dockerfile.api`) — Node 22 + Express + Prisma, expoe `/api/*`
+- **web** (`Dockerfile.web`) — Vite + React, servido como estatico via nginx
 
-**Pre-requisito ja feito**: repo no GitHub em
-<https://github.com/Aurius-Insight/vox> (privado).
-
-## Visao geral do que vai subir
-
-- **API** (`apps/api`): Node 22 + Express + Prisma. Serve `/api/*`.
-- **Frontend** (`apps/web`): Vite + React, build estatico.
-- **Postgres 16** gerenciado pelo Render.
-- **Redis 7** gerenciado pelo Render (sessoes, magic link, rate limit).
-
-Todos no mesmo projeto Render, mesma regiao (`Oregon` ou `Frankfurt`).
-
-## Ordem pratica
-
-Faz **3 → 2 → 4**:
-
-1. **Item 3 primeiro** — gera os secrets localmente (offline, leva 1 min).
-2. **Item 2** — provisiona Render (Postgres, Redis, API, Static Site).
-3. **Item 4** — quando o acesso ao painel BotConversa chegar, liga o canal
-   de WhatsApp.
+> Versoes antigas deste guia descreviam Render e Vercel — nao sao mais o
+> caminho atual. Se precisar do historico, ver o git log deste arquivo.
 
 ---
 
-## Item 3 — Gerar secrets (5 min, local)
+## Pre-requisitos da VPS
 
-Roda no terminal:
+- Docker Engine + `docker compose` v2 instalados.
+- Rede docker externa chamada `web` (compartilhada com o Traefik):
+  ```bash
+  docker network create web   # so na primeira vez
+  ```
+- Traefik rodando e atendendo `vox.voxrio.xyz` (router HTTPS com Let's
+  Encrypt). As labels do `docker-compose.prod.yml` ja registram api e web.
+- `.env` na mesma pasta do `docker-compose.prod.yml`, com os secrets
+  abaixo. **Nunca** versionar este arquivo.
+
+### `.env` de producao
+
+| Chave | Como obter / valor |
+|---|---|
+| `POSTGRES_PASSWORD` | senha forte gerada (uso interno; nao vaza pra app) |
+| `SESSION_SECRET` | `openssl rand -hex 32` |
+| `WEBHOOK_SECRET` | `openssl rand -hex 16` |
+| `ADMIN_EMAIL` | e-mail do diretor (login inicial) |
+| `ADMIN_PASSWORD` | `openssl rand -base64 18` (so vale pro seed inicial) |
+| `BOTCONVERSA_API_KEY` | painel BotConversa → Integracoes → Webhook |
+
+`DATABASE_URL`, `DIRECT_URL` e `REDIS_URL` ja estao definidos dentro do
+`docker-compose.prod.yml` apontando pros services internos — nao precisa
+duplicar no `.env`.
+
+---
+
+## Fluxo de deploy (toda subida)
+
+A imagem da api ja tem um `ENTRYPOINT` que roda `prisma migrate deploy`
+automaticamente antes de iniciar o node — idempotente, no-op quando nao
+ha migration pendente. Se uma migration falhar, o container sai com
+codigo nao-zero e o restart policy do compose **nao** reinicia em loop
+ate o operador resolver.
+
+Mesmo com o auto-migrate, recomenda-se backup antes de qualquer subida
+que inclua migration pendente. O fluxo abaixo cobre os dois casos.
+
+### Caso A — Deploy sem migration nova
+
+Identificavel olhando o diff de `apps/api/prisma/migrations/` no commit
+que esta subindo: se nao apareceu pasta nova, o auto-migrate vai detectar
+"No pending migrations to apply" e seguir direto.
 
 ```bash
-echo "SESSION_SECRET=$(openssl rand -hex 32)"
-echo "WEBHOOK_SECRET=$(openssl rand -hex 16)"
-echo "ADMIN_PASSWORD=$(openssl rand -base64 18)"
+# Na VPS, na pasta do MVP:
+git pull
+docker compose -f docker-compose.prod.yml up -d --build
+docker logs vox-api --tail 50           # confere boot limpo
+curl -fsS https://vox.voxrio.xyz/api/health
 ```
 
-Sai algo do tipo:
+### Caso B — Deploy COM migration nova (recomendado)
 
+```bash
+# 1. Backup antes de qualquer toque no schema.
+./scripts/db-backup.sh /var/backups/vox
+
+# 2. Atualiza o codigo.
+git pull
+
+# 3. Build da nova imagem da api SEM substituir o container que esta no ar.
+docker compose -f docker-compose.prod.yml build api
+
+# 4. (Opcional, paranoico) Roda a migration via container one-shot, fora
+#    do servico principal — assim voce vê o log da migration isolado e o
+#    container atual continua atendendo trafego ate o passo 5.
+docker compose -f docker-compose.prod.yml run --rm \
+  --entrypoint sh api -c 'npx prisma migrate deploy --schema apps/api/prisma/schema.prisma'
+
+#    Se preferir confiar no auto-migrate do entrypoint, pula o passo 4 e
+#    vai direto pro 5 — a primeira coisa que o api container novo faz e
+#    rodar a migration.
+
+# 5. Swap final: substitui api e web pelas novas imagens.
+docker compose -f docker-compose.prod.yml up -d --build
+
+# 6. Sanity.
+docker logs vox-api --tail 80
+curl -fsS https://vox.voxrio.xyz/api/health
 ```
-SESSION_SECRET=a7d3...ef     (64 hex chars = 32 bytes)
-WEBHOOK_SECRET=4b1c...92     (32 hex chars = 16 bytes)
-ADMIN_PASSWORD=Xy7+Kl...     (24 chars base64)
-```
-
-**Guarda esses tres valores em um gerenciador de senhas.** Vao virar
-variaveis no Render no item 2.
-
-### Tabela completa de variaveis (para colar depois)
-
-| Chave | Valor |
-|---|---|
-| `NODE_ENV` | `production` |
-| `TZ` | `America/Sao_Paulo` (todo `new Date()` e log do servidor sai em BRT) |
-| `PORT` | `10000` (porta interna do Render) |
-| `APP_ORIGIN` | URL do Static Site (preencher apos 2.d) |
-| `DATABASE_URL` | Internal URL do Postgres (item 2.a) |
-| `REDIS_URL` | Internal URL do Redis (item 2.b) |
-| `SESSION_SECRET` | gerado acima |
-| `WEBHOOK_SECRET` | gerado acima |
-| `ADMIN_EMAIL` | **seu e-mail real** — vira o login do diretor |
-| `ADMIN_PASSWORD` | gerado acima |
-| `BOTCONVERSA_API_KEY` | deixa vazio por enquanto |
-
-**Importante**:
-- Vazou `SESSION_SECRET`? Toda sessao ativa fica invalida na hora.
-  Usuarios precisam relogar.
-- Vazou `WEBHOOK_SECRET`? Qualquer um manda lead falso pro webhook.
-- Em ambos os casos: gera novo, re-deploy.
 
 ---
 
-## Item 2 — Render (provisionar tudo, ~20 min)
+## Primeiro deploy (bootstrap)
 
-Cria conta em <https://render.com> — login pelo GitHub e o caminho rapido
-(autoriza acesso ao repo `Aurius-Insight/vox`). Depois, **na ordem**:
+So da primeira vez que a stack sobe num servidor zerado:
 
-### 2.a · Postgres
+```bash
+# 1. Clonar o repo na pasta de deploy.
+git clone https://github.com/Aurius-Insight/vox.git
+cd vox
 
-- **New → PostgreSQL**
-- Nome: `vox-mvp-db`, plano **Basic**, regiao `Oregon` (ou `Frankfurt`)
-- Espera ficar `Available` (~2 min)
-- Copia o **Internal Database URL** — guarda pra `DATABASE_URL` no item 2.c
+# 2. Criar o .env com os secrets da tabela acima.
+nano .env
 
-### 2.b · Redis
+# 3. Garantir a rede externa do Traefik.
+docker network ls | grep web || docker network create web
 
-- **New → Key Value** (era "Redis", o nome mudou)
-- Nome: `vox-mvp-redis`, plano **Starter**, mesma regiao
-- Copia o **Internal Redis URL** — vai ser `REDIS_URL` no item 2.c
+# 4. Subir a stack. O entrypoint da api roda `prisma migrate deploy`
+#    automaticamente — todas as migrations sao aplicadas no primeiro boot.
+docker compose -f docker-compose.prod.yml up -d --build
 
-### 2.c · API (Web Service)
+# 5. Rodar o seed inicial — cria diretor (ADMIN_EMAIL/ADMIN_PASSWORD),
+#    materias, unidades e pacotes.
+docker exec vox-api npm run db:seed
 
-- **New → Web Service** → escolhe o repo `Aurius-Insight/vox` (autoriza
-  se necessario)
+# 6. Validar.
+curl -fsS https://vox.voxrio.xyz/api/health
+```
 
-| Campo | Valor |
-|---|---|
-| **Name** | `vox-mvp-api` |
-| **Root Directory** | (em branco — o repo ja e o MVP) |
-| **Runtime** | Node |
-| **Build Command** | `npm ci && npm run db:generate && npm run build -w apps/api` |
-| **Start Command** | `node apps/api/dist/index.js` |
-| **Health Check Path** | `/api/health` |
-| **Pre-Deploy Command** (em Settings → Advanced apos criar) | `npm run db:migrate` |
-
-- Em **Environment**, cola todas as variaveis da tabela do item 3
-  (deixa `APP_ORIGIN` em branco por enquanto — preenche em 2.d).
-- **Create Web Service** — primeiro deploy ~5 min.
-
-### 2.d · Frontend (Static Site)
-
-- **New → Static Site** → mesmo repo
-
-| Campo | Valor |
-|---|---|
-| **Name** | `vox-mvp-web` |
-| **Build Command** | `npm ci && npm run build -w apps/web` |
-| **Publish Directory** | `apps/web/dist` |
-
-- Apos criar, em **Redirects/Rewrites** → adiciona:
-
-  ```
-  Source:      /api/*
-  Destination: https://vox-mvp-api.onrender.com/api/:splat
-  Type:        Rewrite
-  ```
-
-  (Substitui pela URL real da API.) Isso faz o navegador enxergar frontend
-  e API na mesma origem — resolve CORS e cookies de uma vez.
-
-- Anota a URL final do Static Site (ex.: `https://vox-mvp-web.onrender.com`).
-- **Volta no `vox-mvp-api` → Environment** → preenche `APP_ORIGIN` com a
-  URL do Static Site → re-deploy automatico.
-
-### 2.e · Primeiro seed
-
-Depois da API ficar verde no dashboard:
-
-- **vox-mvp-api → Shell** (botao lateral)
-- Roda: `npm run db:seed`
-
-Cria o usuario diretor com `ADMIN_EMAIL` + `ADMIN_PASSWORD` que voce
-configurou. Tambem cria as 5 materias, 2 unidades de exemplo e 2 pacotes.
-
-> Os usuarios de teste (joao.p, coordenacao test, alunos demo) tambem
-> sao criados — bom pra explorar o beta. O diretor pode desativa-los
-> depois pela tela de Configuracoes.
-
-Abre a URL do frontend → login com o e-mail e senha definidos no env.
-**No ar.**
+Login com `ADMIN_EMAIL` + `ADMIN_PASSWORD` definidos no `.env`. **No ar.**
 
 ---
 
-## Item 4 — BotConversa (quando o acesso chegar)
+## Rollback
 
-Quando voce conseguir entrar no painel da Vox RJ no BotConversa:
+### Rollback do codigo (sem mexer no DB)
 
-### 4.a · Pegar a API key
+```bash
+git revert HEAD && git push
+docker compose -f docker-compose.prod.yml up -d --build
+```
 
-- **Configuracoes → Integracoes → Webhook Integration** → copia a chave.
+A maioria das migrations e forward-compatible com o codigo anterior
+(`ADD COLUMN ... DEFAULT`, `DROP NOT NULL`). Reverter so o codigo
+costuma resolver.
 
-### 4.b · Configurar no Render
+### Rollback de uma migration (quando a anterior nao for forward-compatible)
 
-- **vox-mvp-api → Environment → Edit** → preenche `BOTCONVERSA_API_KEY`
-  com a chave.
-- Save → re-deploy automatico.
-- A partir desse momento, o magic link do portal e **entregue
-  automaticamente via WhatsApp** quando o aluno digita o CPF.
+```bash
+# Identifica a ultima migration aplicada.
+docker exec vox-postgres psql -U vox -d vox \
+  -c "SELECT migration_name FROM _prisma_migrations ORDER BY started_at DESC LIMIT 5;"
 
-### 4.c · Configurar o webhook de entrada (BotConversa → Vox)
+# Aplica o SQL reverso do `migration.sql` da pasta correspondente,
+# adaptado a mao — Prisma nao gera reversos automaticamente.
+docker exec -i vox-postgres psql -U vox -d vox <<'SQL'
+-- exemplo do reverso de 20260521120000_student_type:
+ALTER TABLE "Student" DROP COLUMN "type";
+ALTER TABLE "Student" ALTER COLUMN "packageName" SET NOT NULL;
+DROP TYPE "StudentType";
+SQL
 
-No painel do BotConversa, no fluxo de captura de leads:
+# Marca a migration como nao aplicada no historico do Prisma.
+docker exec vox-postgres psql -U vox -d vox \
+  -c "DELETE FROM _prisma_migrations WHERE migration_name = '20260521120000_student_type';"
+```
 
-- Adiciona um **Bloco de Integracao** apos a captura de nome + unidade.
-- **URL**: `https://vox-mvp-api.onrender.com/api/webhooks/botconversa`
-- **Metodo**: `POST`
-- **Headers**:
+Restaurar do backup completo (passo 1 do Caso B) e sempre uma alternativa
+quando o reverso fica complexo.
 
-  ```
-  X-VOX-Webhook-Secret: <o WEBHOOK_SECRET que voce gerou no item 3>
-  Content-Type: application/json
-  ```
+---
 
-- **Body** (mapeando as variaveis do fluxo do BotConversa):
+## BotConversa (webhook + magic link)
 
-  ```json
-  {
-    "eventId": "{{event_id_unico_do_fluxo}}",
-    "contact": {
-      "id": "{{subscriber_id}}",
-      "name": "{{nome}}",
-      "whatsapp": "{{phone}}"
-    },
-    "fields": {
-      "unitInterest": "{{unidade_interesse}}",
-      "campaign": "{{campanha}}"
-    }
-  }
-  ```
-
-  Os nomes exatos das variaveis dependem do que o cliente ja configurou
-  no fluxo dele — ajusta na hora.
-
-### 4.d · Validar
-
-- Cria um lead de teste pelo WhatsApp da Vox RJ.
-- No dashboard do MVP, o lead deve aparecer em segundos com a campanha
-  preenchida.
-- Pede um magic link pelo portal — voce deve receber a mensagem no WhatsApp.
-
-Detalhes tecnicos completos da API estao em
+O canal de WhatsApp esta integrado via BotConversa. Detalhes operacionais
+do webhook (POST do BotConversa pra VOX) e do magic link (mensagem que a
+VOX manda pelo BotConversa) ficam em
 [`BOTCONVERSA_INTEGRACAO.md`](./BOTCONVERSA_INTEGRACAO.md).
+
+Pra subir o canal novo:
+
+1. Painel BotConversa → Configuracoes → Integracoes → Webhook Integration
+   → copia a API key.
+2. Cola em `BOTCONVERSA_API_KEY` no `.env` da VPS.
+3. `docker compose -f docker-compose.prod.yml up -d` (sem `--build`,
+   so re-cria os containers com o env novo).
 
 ---
 
 ## Backup
 
-O `scripts/db-backup.sh` esta pronto, mas em producao o destino dos dumps
-**nao pode** ser o disco efemero do Render (some a cada deploy). Duas opcoes:
+`scripts/db-backup.sh` gera dump comprimido com timestamp + retencao
+(14 ultimos). Rodar via cron na propria VPS:
 
-- **Snapshots automaticos do Render** (recomendado pro beta): o plano Basic
-  do Postgres ja faz snapshots diarios com retencao de 7 dias.
-  Verificar em **Postgres → Backups**. Zero configuracao.
-- **Render Cron Job** que escreve para S3/Backblaze B2:
-  - **New → Cron Job** → mesma branch
-  - Schedule: `0 3 * * *` (diario as 03:00)
-  - Command: `bash scripts/db-backup.sh /tmp/backups && <upload para S3>`
+```cron
+0 3 * * * cd /opt/vox && ./scripts/db-backup.sh /var/backups/vox >> /var/log/vox-backup.log 2>&1
+```
 
-Para a fase de teste interno, o snapshot do Render basta.
-
-## Monitoramento minimo
-
-- **UptimeRobot** (free) apontando para `https://<api>/api/health` —
-  alerta por e-mail se ficar fora por > 2 min.
-- Os logs do Render ja mostram as linhas do `logger` (JSON estruturado,
-  uma por linha). Para os eventos `access_denied` (401/403/429) e
-  `unhandled_error`, pode filtrar no dashboard ou exportar para
-  Logtail / Better Stack quando ganhar volume.
-
-## Checklist de go-live
-
-- [ ] Secrets gerados (`SESSION_SECRET`, `WEBHOOK_SECRET`, `ADMIN_PASSWORD`)
-      e guardados em senha-bank.
-- [ ] Postgres + Redis provisionados, URLs internas em maos.
-- [ ] `vox-mvp-api` criado com Build/Start/Pre-Deploy corretos.
-- [ ] `vox-mvp-web` criado com Rewrite `/api/*` apontando pra API.
-- [ ] `APP_ORIGIN` no env da API preenchido com a URL do Static Site.
-- [ ] Primeiro deploy verde + `npm run db:seed` rodado no shell do Render.
-- [ ] Login do diretor funciona pela URL publica.
-- [ ] `/api/health` responde 200 do navegador.
-- [ ] UptimeRobot configurado.
-- [ ] CI do GitHub Actions verde no ultimo push.
-
-Quando isso fechar, **em fase de teste em producao**.
-
-Os itens 4.b/4.c (BotConversa real) e o backup externo entram quando o
-acesso ao painel chegar / quando passar da fase de teste interno. **Nao
-bloqueiam o inicio do beta.**
+Para backup off-site, agendar copia do `/var/backups/vox` pra S3/B2/etc.
+Nao manter so na VPS — se o disco morrer, vai junto.
 
 ---
 
-## Quando travar
+## Monitoramento minimo
 
-Em qualquer ponto que der erro inesperado no Render (build falhando, env
-faltando, primeiro `seed` quebrando), me passa o output do log e eu te
-oriento. Os pontos mais comuns que travam na primeira vez:
+- **UptimeRobot** apontando pra `https://vox.voxrio.xyz/api/health` —
+  alerta por e-mail se ficar fora por > 2 min.
+- `docker logs vox-api -f` mostra logs estruturados (JSON, uma linha por
+  evento). Filtros mais usados:
+  - `level":"error"` — erros nao tratados.
+  - `access_denied` — 401/403/429 (tentativas de acesso).
+  - `webhook_botconversa` — entrada de lead pelo webhook.
 
-- **Build falha por `npm ci`**: provavelmente o `package-lock.json` nao
-  esta na raiz. Confere `ls package-lock.json` no shell do Render.
-- **`seed` falha com `ADMIN_PASSWORD obrigatorio`**: a env nao chegou —
-  confirma que esta salva e re-rodou o deploy.
-- **Login devolve 401 mesmo com senha certa**: cookies sendo bloqueados
-  porque frontend e API estao em origens diferentes. Confere se o
-  **Rewrite `/api/*`** do Static Site (item 2.d) esta ativo.
-- **CSRF rejeitando login**: `APP_ORIGIN` esta apontando pra URL errada.
-  Tem que ser exatamente a URL do Static Site (com `https://`, sem barra
-  no final).
+---
+
+## Troubleshooting
+
+| Sintoma | Provavel causa | Como mitigar |
+|---|---|---|
+| `vox-api` em restart loop apos deploy | Migration falhou ou crash no boot | `docker logs vox-api --tail 100` mostra a linha do erro. Se for migration, ver secao de Rollback. |
+| 502 do Traefik no dominio | api nao subiu (health) ou rede `web` desconectada | `docker ps` confirma containers up; `docker network inspect web` confirma todos os 4 conectados. |
+| Login retorna 401 com senha certa | `APP_ORIGIN` divergente do dominio real ou cookie nao sendo aceito | Confirma `APP_ORIGIN=https://vox.voxrio.xyz` no compose. |
+| Webhook BotConversa retornando 401 | `WEBHOOK_SECRET` divergente entre VPS e painel BotConversa | Regenera os dois e aplica em ambos. |
+| Lead nao aparece apos webhook | Webhook chegou mas falhou na validacao | `docker logs vox-api | grep webhook` — payload + razao. |
+
+---
+
+## Checklist de go-live de cada deploy
+
+- [ ] CI verde no commit que esta sendo deployado.
+- [ ] Se inclui migration nova: backup tirado (Caso B passo 1).
+- [ ] `docker compose -f docker-compose.prod.yml up -d --build` rodado.
+- [ ] `docker logs vox-api --tail 80` sem `unhandled_error` no boot.
+- [ ] `curl https://vox.voxrio.xyz/api/health` devolve 200.
+- [ ] Login do diretor funciona pela URL publica.
+- [ ] Telas tocadas pelo deploy abrem sem console error.
