@@ -42,15 +42,14 @@ const UpdateStageSchema = z.object({
   stage: z.enum(stages as [LeadStage, ...LeadStage[]]),
 });
 
-// Conversao pode terminar em aluno matriculado (vende pacote) ou
-// experimental (vira aluno-aluno-base sem vender pacote, fica em
-// experimental_agendada). CPF e sempre coletado — operador esta com a
-// pessoa na frente; e o que diferencia o cadastro avulso do experimental
-// criado pelo webhook do lead.
+// Conversao termina em aluno matriculado (vende pacote, lead sai do funil)
+// ou experimental (cria aluno sem pacote, lead vai pra experimental_agendada).
+// CPF e opcional — alguns operadores cadastram antes de ter o documento e
+// completam depois pela edicao. Sem CPF, perde-se dedup por cpfHash.
 const ConvertLeadSchema = z
   .object({
     type: z.enum(['matriculado', 'experimental']).default('matriculado'),
-    cpf: z.string().min(11).max(14),
+    cpf: z.string().min(11).max(14).optional(),
     unitId: z.string().min(1),
     packageId: z.string().min(1).optional(),
   })
@@ -212,9 +211,14 @@ router.post(
   requireRole('diretor', 'coordenacao'),
   asyncHandler(async (req, res) => {
     const input = ConvertLeadSchema.parse(req.body);
-    const cpfDigits = normalizeCpf(input.cpf);
-    if (cpfDigits.length !== 11) {
-      throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
+
+    // CPF e opcional: se veio, valida 11 digitos; se nao, persiste sem hash.
+    let cpfDigits: string | null = null;
+    if (input.cpf) {
+      cpfDigits = normalizeCpf(input.cpf);
+      if (cpfDigits.length !== 11) {
+        throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
+      }
     }
 
     const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
@@ -236,9 +240,7 @@ router.post(
       if (!unit) return { ok: false as const, error: 'unit_not_found' as const };
 
       // Pacote e cobrado e creditBalance sobe so na conversao para matriculado.
-      // Conversao para experimental cria/atualiza o aluno com CPF mas sem
-      // pacote/saldo — equivalente ao lead-driven experimental, com a
-      // diferenca de que aqui o operador tem o CPF na mao.
+      // Conversao para experimental cria/atualiza o aluno sem pacote/saldo.
       let packageName: string | null = null;
       let creditBalance = 0;
       if (input.type === 'matriculado') {
@@ -250,19 +252,26 @@ router.post(
         creditBalance = pkg.classCount;
       }
 
-      const cpfHashValue = hashCpf(cpfDigits);
-      const existingByCpf = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
-      // Permite reusar o CPF se ja existe um aluno ligado ao MESMO lead
-      // (operador apertando converter de novo); caso contrario, dedup.
-      if (existingByCpf && existingByCpf.id !== (lead.student?.id ?? null)) {
-        return { ok: false as const, error: 'cpf_already_used' as const };
+      let cpfHashValue: string | null = null;
+      let cpfMaskedValue: string | null = null;
+      if (cpfDigits) {
+        cpfHashValue = hashCpf(cpfDigits);
+        const existingByCpf = await tx.student.findFirst({
+          where: { cpfHash: cpfHashValue },
+        });
+        // Permite reusar o CPF se ja existe um aluno ligado ao MESMO lead
+        // (operador apertando converter de novo); caso contrario, dedup.
+        if (existingByCpf && existingByCpf.id !== (lead.student?.id ?? null)) {
+          return { ok: false as const, error: 'cpf_already_used' as const };
+        }
+        cpfMaskedValue = maskCpf(cpfDigits) ?? null;
       }
 
       // Atualiza o aluno-experimental existente (criado em "experimental_agendada")
       // OU cria do zero se o lead pulou a etapa.
       const enrollmentData = {
         cpfHash: cpfHashValue,
-        cpfMasked: maskCpf(cpfDigits),
+        cpfMasked: cpfMaskedValue,
         unitId: input.unitId,
         type: input.type,
         packageName,

@@ -328,9 +328,9 @@ export function AlunosPage() {
     try {
       const body: Record<string, string> = {
         type: convertForm.type,
-        cpf: convertForm.cpf,
         unitId: convertForm.unitId,
       };
+      if (convertForm.cpf) body.cpf = convertForm.cpf;
       // Pacote so vai no corpo quando matriculando — experimental nao paga.
       if (convertForm.type === 'matriculado' && convertForm.packageId) {
         body.packageId = convertForm.packageId;
@@ -474,17 +474,14 @@ export function AlunosPage() {
                 onChange={(event) => updateField('email', event.target.value)}
               />
             </label>
-            {form.type === 'matriculado' && (
-              <label>
-                CPF
-                <input
-                  value={form.cpf}
-                  onChange={(event) => updateField('cpf', event.target.value)}
-                  inputMode="numeric"
-                  required
-                />
-              </label>
-            )}
+            <label>
+              CPF (opcional)
+              <input
+                value={form.cpf}
+                onChange={(event) => updateField('cpf', event.target.value)}
+                inputMode="numeric"
+              />
+            </label>
             <label>
               Unidade
               <select
@@ -585,14 +582,13 @@ export function AlunosPage() {
                   </select>
                 </label>
                 <label>
-                  CPF
+                  CPF (opcional)
                   <input
                     value={convertForm.cpf}
                     onChange={(event) =>
                       setConvertForm((current) => ({ ...current, cpf: event.target.value }))
                     }
                     inputMode="numeric"
-                    required
                   />
                 </label>
                 <label>

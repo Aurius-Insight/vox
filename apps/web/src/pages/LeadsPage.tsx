@@ -31,6 +31,7 @@ type LeadForm = {
 };
 
 type ConvertForm = {
+  type: 'matriculado' | 'experimental';
   cpf: string;
   unitId: string;
   packageId: string;
@@ -38,7 +39,13 @@ type ConvertForm = {
 
 type ConvertResponse = {
   data: {
-    student: { id: string; name: string; enrollmentCode: string; packageName: string };
+    student: {
+      id: string;
+      name: string;
+      enrollmentCode: string;
+      packageName: string | null;
+      type: 'matriculado' | 'experimental';
+    };
     lead: Lead;
   };
 };
@@ -51,7 +58,12 @@ const EMPTY_FORM: LeadForm = {
   source: '',
 };
 
-const EMPTY_CONVERT: ConvertForm = { cpf: '', unitId: '', packageId: '' };
+const EMPTY_CONVERT: ConvertForm = {
+  type: 'matriculado',
+  cpf: '',
+  unitId: '',
+  packageId: '',
+};
 
 // Etapas terminais nao aceitam mais conversao (matriculado ja foi; perdido
 // virou nao-oportunidade). Para o resto, o card mostra o botao Converter.
@@ -228,16 +240,23 @@ export function LeadsPage() {
     setConvertSaving(true);
 
     try {
+      const body: Record<string, string> = {
+        type: convertForm.type,
+        unitId: convertForm.unitId,
+      };
+      if (convertForm.cpf) body.cpf = convertForm.cpf;
+      if (convertForm.type === 'matriculado' && convertForm.packageId) {
+        body.packageId = convertForm.packageId;
+      }
       const response = await api<ConvertResponse>(`/api/leads/${convertingLead.id}/convert`, {
         method: 'POST',
-        body: JSON.stringify({
-          cpf: convertForm.cpf,
-          unitId: convertForm.unitId,
-          packageId: convertForm.packageId,
-        }),
+        body: JSON.stringify(body),
       });
+      const { name, enrollmentCode, packageName, type } = response.data.student;
       toast.success(
-        `${response.data.student.name} convertido em aluno. Matricula ${response.data.student.enrollmentCode} - ${response.data.student.packageName}.`,
+        type === 'matriculado'
+          ? `${name} matriculado. Matricula ${enrollmentCode} - ${packageName}.`
+          : `${name} virou aluno experimental. Matricula ${enrollmentCode}.`,
       );
       setConvertingLead(undefined);
       await load();
@@ -272,16 +291,30 @@ export function LeadsPage() {
           >
             <h2>Converter em aluno: {convertingLead.name}</h2>
             <p className="muted-text">
-              O CPF e pedido so na matricula. O saldo de aulas vem da quantidade do pacote.
+              {convertForm.type === 'matriculado'
+                ? 'O saldo de aulas vem da quantidade do pacote. CPF e opcional — preencha quando tiver.'
+                : 'Cria o aluno experimental (sem pacote). O lead vai pra "experimental_agendada".'}
             </p>
             <form className="grid-form" onSubmit={handleConvert}>
               <label>
-                CPF
+                Tipo
+                <select
+                  value={convertForm.type}
+                  onChange={(event) =>
+                    updateConvertField('type', event.target.value as ConvertForm['type'])
+                  }
+                  required
+                >
+                  <option value="matriculado">Matriculado</option>
+                  <option value="experimental">Experimental</option>
+                </select>
+              </label>
+              <label>
+                CPF (opcional)
                 <input
                   value={convertForm.cpf}
                   onChange={(event) => updateConvertField('cpf', event.target.value)}
                   inputMode="numeric"
-                  required
                 />
               </label>
               <label>
@@ -299,25 +332,31 @@ export function LeadsPage() {
                   ))}
                 </select>
               </label>
-              <label>
-                Pacote
-                <select
-                  value={convertForm.packageId}
-                  onChange={(event) => updateConvertField('packageId', event.target.value)}
-                  required
-                >
-                  <option value="">Selecione</option>
-                  {packages.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} ({item.classCount} aulas)
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {convertForm.type === 'matriculado' && (
+                <label>
+                  Pacote
+                  <select
+                    value={convertForm.packageId}
+                    onChange={(event) => updateConvertField('packageId', event.target.value)}
+                    required
+                  >
+                    <option value="">Selecione</option>
+                    {packages.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({item.classCount} aulas)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="grid-form-actions">
                 <div className="row-actions">
                   <button type="submit" disabled={convertSaving}>
-                    {convertSaving ? 'Convertendo...' : 'Confirmar matricula'}
+                    {convertSaving
+                      ? 'Convertendo...'
+                      : convertForm.type === 'matriculado'
+                        ? 'Matricular aluno'
+                        : 'Cadastrar como experimental'}
                   </button>
                   <button type="button" className="secondary-button" onClick={cancelConvert}>
                     Cancelar

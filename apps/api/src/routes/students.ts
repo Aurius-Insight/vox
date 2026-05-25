@@ -20,9 +20,10 @@ const router = Router();
 
 const VIEW_ROLES = ['diretor', 'coordenacao'] as const;
 
-// Aluno experimental: CPF e pacote ficam opcionais (espelha o experimental
-// criado pelo lead, que tambem nao tem CPF nem saldo). Matriculado exige
-// os dois — sao a chave de identidade e o saldo de aulas.
+// CPF e opcional em qualquer cadastro (decisao do operador: o time muitas
+// vezes nao tem o CPF na hora do cadastro). Sem CPF, perde-se a dedup
+// por cpfHash — pode entrar aluno duplicado se a equipe nao conferir.
+// Pacote so e obrigatorio para matriculado (experimental nasce sem saldo).
 const CreateStudentSchema = z
   .object({
     name: z.string().min(2).max(120),
@@ -34,21 +35,12 @@ const CreateStudentSchema = z
     packageId: z.string().min(1).optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.type === 'matriculado') {
-      if (!data.cpf) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['cpf'],
-          message: 'CPF e obrigatorio para aluno matriculado.',
-        });
-      }
-      if (!data.packageId) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['packageId'],
-          message: 'Pacote e obrigatorio para aluno matriculado.',
-        });
-      }
+    if (data.type === 'matriculado' && !data.packageId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['packageId'],
+        message: 'Pacote e obrigatorio para aluno matriculado.',
+      });
     }
   });
 
@@ -110,11 +102,11 @@ router.post(
   asyncHandler(async (req, res) => {
     const input = CreateStudentSchema.parse(req.body);
 
-    // CPF so e validado/persistido pra matriculado. Experimental espelha o
-    // criado pelo fluxo do lead — sem CPF, sem hash, sem saldo.
+    // CPF e opcional em qualquer cadastro. Quando vem, valida os 11 digitos
+    // e usa pra hash/dedup; quando nao, persiste sem cpfHash/cpfMasked.
     let cpfDigits: string | null = null;
-    if (input.type === 'matriculado') {
-      cpfDigits = normalizeCpf(input.cpf!);
+    if (input.cpf) {
+      cpfDigits = normalizeCpf(input.cpf);
       if (cpfDigits.length !== 11) {
         throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
       }
