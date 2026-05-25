@@ -15,6 +15,7 @@ import { NoAccessPage } from './pages/NoAccessPage';
 import { PortalHomePage } from './pages/PortalHomePage';
 import { PortalLoginPage } from './pages/PortalLoginPage';
 import { PresencaPage } from './pages/PresencaPage';
+import { ProfessoresPage } from './pages/ProfessoresPage';
 import { UnidadesPage } from './pages/UnidadesPage';
 
 // O Dashboard carrega o Recharts (pesado) — code-split: so baixa quando aberto.
@@ -82,6 +83,10 @@ export default function App() {
 
               <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
                 <Route path="/alunos" element={<AlunosPage />} />
+              </Route>
+
+              <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
+                <Route path="/professores" element={<ProfessoresPage />} />
               </Route>
 
               <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>

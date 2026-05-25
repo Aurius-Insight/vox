@@ -6,6 +6,13 @@ import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler } from '../lib/http.js';
 import { checkUserUpdateGuard } from '../domain/users.js';
+import {
+  buildTeacherTimeline,
+  computeTeacherKpis,
+  type ClassSessionSnapshot,
+  type PunctualityDelay,
+  type TeacherAttendanceSnapshot,
+} from '../domain/teacher-history.js';
 
 const router = Router();
 
@@ -211,6 +218,135 @@ router.patch(
     });
 
     res.json({ data: user });
+  }),
+);
+
+const TeachingHistoryQuerySchema = z.object({
+  since: z.string().datetime().optional(),
+});
+
+const TEACHING_HISTORY_DEFAULT_WINDOW_DAYS = 30;
+const TEACHING_HISTORY_MAX_ITEMS = 500;
+
+// Perfil do professor (KPIs + timeline). O endpoint vive em /api/users porque
+// professor e um User com role 'professor' — evita criar um router paralelo
+// duplicando autenticacao. Devolve 404 se o usuario nao for professor.
+router.get(
+  '/:userId/teaching-history',
+  requireAuth,
+  requireRole('diretor', 'coordenacao'),
+  asyncHandler(async (req, res) => {
+    const query = TeachingHistoryQuerySchema.parse(req.query);
+    const now = new Date();
+    const since = query.since
+      ? new Date(query.since)
+      : new Date(now.getTime() - TEACHING_HISTORY_DEFAULT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const windowDays = Math.max(
+      1,
+      Math.ceil((now.getTime() - since.getTime()) / (24 * 60 * 60 * 1000)),
+    );
+
+    const teacher = await prisma.user.findUnique({
+      where: { id: req.params.userId },
+      select: publicUserSelect,
+    });
+
+    if (!teacher || !teacher.roles.includes('professor')) {
+      throw new ApiError(404, 'teacher_not_found', 'Professor nao encontrado.');
+    }
+
+    const [sessions, attendances, punctuality, nextSession] = await Promise.all([
+      prisma.classSession.findMany({
+        where: { teacherUserId: teacher.id, startsAt: { gte: since } },
+        orderBy: { startsAt: 'desc' },
+        take: TEACHING_HISTORY_MAX_ITEMS,
+        select: {
+          id: true,
+          startsAt: true,
+          endsAt: true,
+          canceledAt: true,
+          capacity: true,
+          subject: { select: { name: true } },
+          unit: { select: { name: true } },
+        },
+      }),
+      prisma.attendance.findMany({
+        where: {
+          markedAt: { gte: since },
+          classSession: { teacherUserId: teacher.id },
+        },
+        orderBy: { markedAt: 'desc' },
+        take: TEACHING_HISTORY_MAX_ITEMS,
+        select: {
+          studentId: true,
+          classSessionId: true,
+          status: true,
+          markedAt: true,
+        },
+      }),
+      prisma.attendance.findMany({
+        where: { markedByUserId: teacher.id, markedAt: { gte: since } },
+        orderBy: { markedAt: 'desc' },
+        take: TEACHING_HISTORY_MAX_ITEMS,
+        select: { markedAt: true, classSession: { select: { endsAt: true } } },
+      }),
+      prisma.classSession.findFirst({
+        where: {
+          teacherUserId: teacher.id,
+          canceledAt: null,
+          startsAt: { gte: now },
+        },
+        orderBy: { startsAt: 'asc' },
+        select: { startsAt: true },
+      }),
+    ]);
+
+    const sessionsInWindow: ClassSessionSnapshot[] = sessions.map((s) => ({
+      id: s.id,
+      subjectName: s.subject?.name ?? null,
+      unitName: s.unit?.name ?? null,
+      startsAt: s.startsAt,
+      endsAt: s.endsAt,
+      canceledAt: s.canceledAt,
+      capacity: s.capacity,
+    }));
+
+    const attendancesInWindow: TeacherAttendanceSnapshot[] = attendances.map((a) => ({
+      studentId: a.studentId,
+      sessionId: a.classSessionId,
+      status: a.status,
+      markedAt: a.markedAt,
+    }));
+
+    const punctualityDelays: PunctualityDelay[] = punctuality.map((p) => ({
+      markedAt: p.markedAt,
+      sessionEndsAt: p.classSession.endsAt,
+    }));
+
+    const kpis = computeTeacherKpis({
+      now,
+      windowDays,
+      sessionsInWindow,
+      attendancesInWindow,
+      punctualityDelays,
+      nextSessionAt: nextSession?.startsAt ?? null,
+    });
+
+    const timeline = buildTeacherTimeline({
+      now,
+      sessions: sessionsInWindow,
+      attendancesBySession: attendancesInWindow,
+    });
+
+    res.json({
+      data: {
+        teacher,
+        windowDays,
+        since: since.toISOString(),
+        kpis,
+        timeline,
+      },
+    });
   }),
 );
 

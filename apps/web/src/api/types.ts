@@ -191,6 +191,42 @@ export type StudentHistory = {
   timeline: StudentTimelineEvent[];
 };
 
+export type TeacherKpis = {
+  classesTaught: number;
+  uniqueStudents: number;
+  presenceRate: number;
+  noShowRate: number;
+  averagePunctualityHours: number | null;
+  nextClassAt: string | null;
+};
+
+export type TeacherTimelineEvent =
+  | {
+      type: 'class_taught';
+      at: string;
+      data: {
+        sessionId: string;
+        subject: string | null;
+        unit: string | null;
+        capacity: number;
+        present: number;
+        noShow: number;
+      };
+    }
+  | {
+      type: 'class_canceled';
+      at: string;
+      data: { sessionId: string; subject: string | null; unit: string | null };
+    };
+
+export type TeachingHistory = {
+  teacher: AppUser;
+  windowDays: number;
+  since: string;
+  kpis: TeacherKpis;
+  timeline: TeacherTimelineEvent[];
+};
+
 export type Unit = {
   id: string;
   name: string;
