@@ -33,7 +33,7 @@ export function LoginPage() {
     <main className="auth-shell">
       <form className="auth-card" onSubmit={handleSubmit}>
         <div>
-          <p className="eyebrow">Vox RJ MVP</p>
+          <p className="eyebrow">Vox Rio MVP</p>
           <h1>Entrar no sistema</h1>
         </div>
         <label>

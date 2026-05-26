@@ -122,7 +122,7 @@ export function PortalHomePage() {
         <aside className="credit-panel">
           <div className="credit-panel-label">
             <span>Aulas restantes</span>
-            <span>Vox RJ</span>
+            <span>Vox Rio</span>
           </div>
           <div className="credit-panel-value">
             <strong>{String(student?.aulasRestantes ?? '-').padStart(2, '0')}</strong>

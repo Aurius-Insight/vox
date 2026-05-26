@@ -1,7 +1,7 @@
 {
-  "name": "Vox RJ - Sistema Interno",
-  "short_name": "Vox RJ",
-  "description": "Gestao operacional e comercial da Vox RJ: leads, agenda, presenca e portal do aluno.",
+  "name": "Vox Rio - Sistema Interno",
+  "short_name": "Vox Rio",
+  "description": "Gestao operacional e comercial da Vox Rio: leads, agenda, presenca e portal do aluno.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
