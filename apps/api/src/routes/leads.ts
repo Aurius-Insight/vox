@@ -9,20 +9,14 @@ import { hashCpf, normalizeCpf } from '../lib/cpf.js';
 import { canConvertLead, uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
 import { leadSearchConditions } from '../domain/lead-search.js';
+import { getLeadStageBySlug } from '../lib/lead-stage-cache.js';
 
 const router = Router();
 
-const stages: LeadStage[] = [
-  'novo_lead',
-  'em_atendimento',
-  'pre_agendamento',
-  'experimental_agendada',
-  'matriculado',
-  'perdido',
-];
-
+// stage agora aceita slug livre (etapas custom criadas pela UI). A validacao
+// do slug existir no banco e feita no handler que escreve.
 const ListQuerySchema = z.object({
-  stage: z.enum(stages as [LeadStage, ...LeadStage[]]).optional(),
+  stage: z.string().max(40).optional(),
   search: z.string().max(80).optional(),
   // Match exato em Lead.unitInterest (que e texto livre). Usado pelo Kanban.
   unit: z.string().max(80).optional(),
@@ -39,7 +33,7 @@ const CreateLeadSchema = z.object({
 });
 
 const UpdateStageSchema = z.object({
-  stage: z.enum(stages as [LeadStage, ...LeadStage[]]),
+  stage: z.string().min(1).max(40),
 });
 
 // Conversao termina em aluno matriculado (vende pacote, lead sai do funil)
@@ -77,7 +71,7 @@ function canViewSensitiveLeadData(roles: Role[]) {
   return roles.includes('diretor') || roles.includes('coordenacao');
 }
 
-function toLeadDto(lead: Lead, canViewSensitive: boolean) {
+function toLeadDto(lead: Lead & { stage?: LeadStage }, canViewSensitive: boolean) {
   return {
     id: lead.id,
     name: lead.name,
@@ -85,7 +79,9 @@ function toLeadDto(lead: Lead, canViewSensitive: boolean) {
     unitInterest: lead.unitInterest,
     campaign: lead.campaign ?? undefined,
     source: lead.source,
-    stage: lead.stage,
+    // Front recebe slug — interface estavel. Quando o include nao traz o
+    // stage, busca via cache (raro nos endpoints atuais, mas seguro).
+    stage: lead.stage?.slug ?? '',
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
   };
@@ -102,7 +98,7 @@ router.get(
     const { page, pageSize, offset } = parsePagination(req.query);
 
     const where: Prisma.LeadWhereInput = {
-      ...(query.stage ? { stage: query.stage } : {}),
+      ...(query.stage ? { stage: { slug: query.stage } } : {}),
       ...(query.unit ? { unitInterest: query.unit } : {}),
       ...(query.search ? { OR: leadSearchConditions(query.search) } : {}),
     };
@@ -113,6 +109,7 @@ router.get(
         orderBy: { updatedAt: 'desc' },
         skip: offset,
         take: pageSize,
+        include: { stage: true },
       }),
       prisma.lead.count({ where }),
     ]);
@@ -134,6 +131,7 @@ router.post(
   requireRole('diretor', 'coordenacao'),
   asyncHandler(async (req, res) => {
     const input = CreateLeadSchema.parse(req.body);
+    const novoLeadStage = await getLeadStageBySlug('novo_lead');
     const lead = await prisma.lead.create({
       data: {
         name: input.name,
@@ -141,8 +139,9 @@ router.post(
         unitInterest: input.unitInterest,
         campaign: input.campaign,
         source: input.source,
-        stage: 'novo_lead',
+        stageId: novoLeadStage.id,
       },
+      include: { stage: true },
     });
     res.status(201).json({ data: toLeadDto(lead, true) });
   }),
@@ -157,10 +156,15 @@ router.patch(
 
     try {
       const lead = await prisma.$transaction(async (tx) => {
+        const targetStage = await tx.leadStage.findUnique({ where: { slug: input.stage } });
+        if (!targetStage) {
+          throw new ApiError(404, 'stage_not_found', 'Etapa nao encontrada.');
+        }
+
         const updated = await tx.lead.update({
           where: { id: req.params.leadId },
-          data: { stage: input.stage },
-          include: { student: { select: { id: true } } },
+          data: { stageId: targetStage.id },
+          include: { student: { select: { id: true } }, stage: true },
         });
 
         // Ao agendar a aula experimental, o lead vira um aluno experimental
@@ -229,7 +233,7 @@ router.post(
     const result = await prisma.$transaction(async (tx) => {
       const lead = await tx.lead.findUnique({
         where: { id: req.params.leadId },
-        include: { student: { select: { id: true, type: true } } },
+        include: { student: { select: { id: true, type: true } }, stage: true },
       });
       if (!lead) return { ok: false as const, error: 'lead_not_found' as const };
 
@@ -304,11 +308,13 @@ router.post(
       // Stage do lead acompanha o desfecho: matriculado sai do funil,
       // experimental fica em experimental_agendada (continua no pipeline
       // pra ser matriculado depois).
-      const nextStage =
-        input.type === 'matriculado' ? ('matriculado' as const) : ('experimental_agendada' as const);
+      const nextSlug = input.type === 'matriculado' ? 'matriculado' : 'experimental_agendada';
+      const nextStage = await getLeadStageBySlug(nextSlug, tx);
+      const previousStageSlug = lead.stage.slug;
       const updatedLead = await tx.lead.update({
         where: { id: lead.id },
-        data: { stage: nextStage },
+        data: { stageId: nextStage.id },
+        include: { stage: true },
       });
 
       await tx.auditLog.create({
@@ -318,7 +324,7 @@ router.post(
           entityType: 'student',
           entityId: student.id,
           action: lead.student ? 'student.enrolled' : 'lead.converted',
-          before: { leadId: lead.id, stage: lead.stage },
+          before: { leadId: lead.id, stage: previousStageSlug },
           after: {
             studentId: student.id,
             enrollmentCode: student.enrollmentCode,

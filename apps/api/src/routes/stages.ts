@@ -1,32 +1,35 @@
 import { Router } from 'express';
-import type { LeadStage } from '@prisma/client';
+import type { LeadStage, LeadStageKind } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler } from '../lib/http.js';
+import { invalidateLeadStageCache } from '../lib/lead-stage-cache.js';
 import {
   resolveStageArchive,
+  resolveStageCreate,
+  resolveStageDelete,
   validateStageReorder,
-  type LeadStageSlug,
-  type StageConfigInput,
 } from '../domain/stage-config.js';
 
 const router = Router();
 
-const stageEnumValues: LeadStage[] = [
-  'novo_lead',
-  'em_atendimento',
-  'pre_agendamento',
-  'experimental_agendada',
-  'matriculado',
-  'perdido',
-];
-const stageEnumSchema = z.enum(stageEnumValues as [LeadStage, ...LeadStage[]]);
+const SLUG_REGEX = /^[a-z0-9_]+$/;
+const COLOR_REGEX = /^#[0-9a-f]{6}$/i;
+const KIND_VALUES: LeadStageKind[] = ['active', 'won', 'lost'];
+
+const CreateStageSchema = z.object({
+  label: z.string().min(1).max(80),
+  slug: z.string().min(1).max(40).regex(SLUG_REGEX).optional(),
+  color: z.string().regex(COLOR_REGEX).nullable().optional(),
+  kind: z.enum(KIND_VALUES as [LeadStageKind, ...LeadStageKind[]]).optional(),
+  order: z.number().int().min(1).optional(),
+});
 
 const UpdateStageSchema = z
   .object({
     label: z.string().min(1).max(80).optional(),
-    color: z.string().regex(/^#[0-9a-f]{6}$/i).nullable().optional(),
+    color: z.string().regex(COLOR_REGEX).nullable().optional(),
     visible: z.boolean().optional(),
   })
   .refine((data) => Object.values(data).some((v) => v !== undefined), {
@@ -34,75 +37,127 @@ const UpdateStageSchema = z
   });
 
 const ArchiveStageSchema = z.object({
-  moveLeadsTo: stageEnumSchema.optional(),
+  moveLeadsTo: z.string().optional(),
 });
 
 const ReorderSchema = z.object({
-  order: z.array(z.object({ stage: stageEnumSchema, order: z.number().int().min(1) })).min(1),
+  order: z.array(z.object({ id: z.string(), order: z.number().int().min(1) })).min(1),
 });
 
-function toDto(row: {
-  stage: LeadStage;
-  label: string;
-  color: string | null;
-  order: number;
-  visible: boolean;
-  systemic: boolean;
-}) {
+function toDto(row: LeadStage) {
   return {
-    stage: row.stage,
+    id: row.id,
+    slug: row.slug,
     label: row.label,
     color: row.color,
     order: row.order,
-    visible: row.visible,
+    kind: row.kind,
     systemic: row.systemic,
+    archived: row.archived,
+    // Mantem `visible` no DTO pro front continuar usando o nome conhecido
+    // (apresentacao). archived=true -> visible=false e vice-versa.
+    visible: !row.archived,
   };
 }
 
-function toDomainInput(row: {
-  stage: LeadStage;
-  label: string;
-  color: string | null;
-  order: number;
-  visible: boolean;
-  systemic: boolean;
-}): StageConfigInput {
-  return {
-    stage: row.stage as LeadStageSlug,
-    label: row.label,
-    color: row.color,
-    order: row.order,
-    visible: row.visible,
-    systemic: row.systemic,
-  };
+function slugify(label: string): string {
+  return label
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
 }
 
-// Lista publica (diretor + coordenacao + professor leem; sao usadas no
-// Kanban e em selects). So diretor escreve — endpoints PATCH/POST exigem.
 router.get(
   '/',
   requireAuth,
   requireRole('diretor', 'coordenacao', 'professor'),
   asyncHandler(async (_req, res) => {
-    const stages = await prisma.stageConfig.findMany({
-      orderBy: { order: 'asc' },
-    });
+    const stages = await prisma.leadStage.findMany({ orderBy: { order: 'asc' } });
     res.json({ data: stages.map(toDto) });
   }),
 );
 
-router.patch(
-  '/:stage',
+router.post(
+  '/',
   requireAuth,
   requireRole('diretor'),
   asyncHandler(async (req, res) => {
-    const stageParam = stageEnumSchema.parse(req.params.stage);
+    const input = CreateStageSchema.parse(req.body);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const all = await tx.leadStage.findMany({ orderBy: { order: 'asc' } });
+      const baseSlug = input.slug ?? slugify(input.label);
+      if (!baseSlug) return { ok: false as const, error: 'invalid_slug' as const };
+
+      const decision = resolveStageCreate({
+        label: input.label,
+        slug: baseSlug,
+        existingSlugs: all.map((s) => s.slug),
+        existingOrders: all.map((s) => s.order),
+        kind: input.kind ?? 'active',
+      });
+      if (!decision.ok) return { ok: false as const, error: decision.reason };
+
+      const nextOrder = input.order ?? Math.max(0, ...all.map((s) => s.order)) + 1;
+      // Se o usuario pediu order explicita que ja existe, abre espaco.
+      if (input.order !== undefined && all.some((s) => s.order === input.order)) {
+        await openOrderSpace(tx, input.order);
+      }
+
+      const created = await tx.leadStage.create({
+        data: {
+          slug: baseSlug,
+          label: input.label,
+          color: input.color ?? null,
+          order: nextOrder,
+          kind: input.kind ?? 'active',
+          systemic: false,
+          archived: false,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'lead_stage',
+          entityId: created.id,
+          action: 'stage.created',
+          after: { slug: created.slug, label: created.label, kind: created.kind, order: created.order },
+        },
+      });
+
+      return { ok: true as const, created };
+    });
+
+    if (!result.ok) {
+      const map: Record<string, { status: number; message: string }> = {
+        invalid_slug: { status: 400, message: 'Slug invalido (use letras, numeros e _).' },
+        slug_taken: { status: 409, message: 'Ja existe etapa com esse slug.' },
+        invalid_label: { status: 400, message: 'Nome da etapa invalido.' },
+      };
+      const mapped = map[result.error] ?? { status: 400, message: 'Nao foi possivel criar a etapa.' };
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    invalidateLeadStageCache();
+    res.status(201).json({ data: toDto(result.created) });
+  }),
+);
+
+router.patch(
+  '/:idOrSlug',
+  requireAuth,
+  requireRole('diretor'),
+  asyncHandler(async (req, res) => {
     const input = UpdateStageSchema.parse(req.body);
+    const target = await findByIdOrSlug(req.params.idOrSlug);
+    if (!target) throw new ApiError(404, 'stage_not_found', 'Etapa nao encontrada.');
 
-    const before = await prisma.stageConfig.findUnique({ where: { stage: stageParam } });
-    if (!before) throw new ApiError(404, 'stage_not_found', 'Etapa nao encontrada.');
-
-    if (input.visible === false && before.systemic) {
+    if (input.visible === false && target.systemic) {
       throw new ApiError(
         400,
         'systemic_stage',
@@ -110,12 +165,12 @@ router.patch(
       );
     }
 
-    const updated = await prisma.stageConfig.update({
-      where: { stage: stageParam },
+    const updated = await prisma.leadStage.update({
+      where: { id: target.id },
       data: {
         ...(input.label !== undefined ? { label: input.label } : {}),
         ...(input.color !== undefined ? { color: input.color } : {}),
-        ...(input.visible !== undefined ? { visible: input.visible } : {}),
+        ...(input.visible !== undefined ? { archived: !input.visible } : {}),
       },
     });
 
@@ -123,72 +178,69 @@ router.patch(
       data: {
         actorUserId: req.user!.id,
         actorType: 'user',
-        entityType: 'stage_config',
-        entityId: stageParam,
+        entityType: 'lead_stage',
+        entityId: target.id,
         action: 'stage.updated',
-        before: { label: before.label, color: before.color, visible: before.visible },
-        after: { label: updated.label, color: updated.color, visible: updated.visible },
+        before: { label: target.label, color: target.color, archived: target.archived },
+        after: { label: updated.label, color: updated.color, archived: updated.archived },
       },
     });
 
+    invalidateLeadStageCache();
     res.json({ data: toDto(updated) });
   }),
 );
 
-// Arquiva (oculta) uma etapa. Se houver leads, exige `moveLeadsTo` no
-// body — bulk move + flag em transacao. Sistemicos bloqueados.
 router.post(
-  '/:stage/archive',
+  '/:idOrSlug/archive',
   requireAuth,
   requireRole('diretor'),
   asyncHandler(async (req, res) => {
-    const stageParam = stageEnumSchema.parse(req.params.stage);
     const input = ArchiveStageSchema.parse(req.body);
 
     const result = await prisma.$transaction(async (tx) => {
-      const target = await tx.stageConfig.findUnique({ where: { stage: stageParam } });
+      const target = await findByIdOrSlug(req.params.idOrSlug, tx);
       if (!target) return { ok: false as const, error: 'stage_not_found' as const };
 
-      const leadsInStage = await tx.lead.count({ where: { stage: stageParam } });
+      const leadsInStage = await tx.lead.count({ where: { stageId: target.id } });
 
-      const destinationConfig = input.moveLeadsTo
-        ? await tx.stageConfig.findUnique({ where: { stage: input.moveLeadsTo } })
+      const destination = input.moveLeadsTo
+        ? await findByIdOrSlug(input.moveLeadsTo, tx)
         : null;
 
       const decision = resolveStageArchive({
-        target: toDomainInput(target),
+        target: { slug: target.slug, systemic: target.systemic, archived: target.archived },
         leadsInStage,
-        destination: (input.moveLeadsTo ?? null) as LeadStageSlug | null,
-        destinationConfig: destinationConfig ? toDomainInput(destinationConfig) : null,
+        destination: destination ? { id: destination.id, archived: destination.archived } : null,
+        sameStage: destination?.id === target.id,
       });
-
       if (!decision.ok) return { ok: false as const, error: decision.reason };
 
       let movedCount = 0;
       if (decision.moveLeads) {
         const moveResult = await tx.lead.updateMany({
-          where: { stage: stageParam },
-          data: { stage: decision.destination as LeadStage },
+          where: { stageId: target.id },
+          data: { stageId: decision.destinationId },
         });
         movedCount = moveResult.count;
       }
 
-      const updated = await tx.stageConfig.update({
-        where: { stage: stageParam },
-        data: { visible: false },
+      const updated = await tx.leadStage.update({
+        where: { id: target.id },
+        data: { archived: true, archivedAt: new Date() },
       });
 
       await tx.auditLog.create({
         data: {
           actorUserId: req.user!.id,
           actorType: 'user',
-          entityType: 'stage_config',
-          entityId: stageParam,
+          entityType: 'lead_stage',
+          entityId: target.id,
           action: 'stage.archived',
-          before: { visible: true, leadsInStage },
+          before: { archived: false, leadsInStage },
           after: {
-            visible: false,
-            movedTo: decision.moveLeads ? decision.destination : null,
+            archived: true,
+            movedTo: decision.moveLeads ? decision.destinationId : null,
             movedCount,
           },
         },
@@ -203,7 +255,7 @@ router.post(
         systemic_stage: { status: 400, message: 'Etapa sistemica nao pode ser arquivada.' },
         destination_required: {
           status: 400,
-          message: 'A etapa tem leads — informe `moveLeadsTo` para mover os leads.',
+          message: 'A etapa tem leads — informe `moveLeadsTo`.',
         },
         destination_not_found: { status: 404, message: 'Etapa de destino nao encontrada.' },
         destination_archived: { status: 400, message: 'Etapa de destino esta arquivada.' },
@@ -211,39 +263,115 @@ router.post(
           status: 400,
           message: 'Destino nao pode ser a propria etapa que sera arquivada.',
         },
+        already_archived: { status: 400, message: 'Etapa ja esta arquivada.' },
       };
       const mapped = map[result.error] ?? { status: 400, message: 'Operacao invalida.' };
       throw new ApiError(mapped.status, result.error, mapped.message);
     }
 
+    invalidateLeadStageCache();
     res.json({ data: { ...toDto(result.updated), movedCount: result.movedCount } });
   }),
 );
 
 router.post(
-  '/:stage/restore',
+  '/:idOrSlug/restore',
   requireAuth,
   requireRole('diretor'),
   asyncHandler(async (req, res) => {
-    const stageParam = stageEnumSchema.parse(req.params.stage);
+    const target = await findByIdOrSlug(req.params.idOrSlug);
+    if (!target) throw new ApiError(404, 'stage_not_found', 'Etapa nao encontrada.');
 
-    const updated = await prisma.stageConfig.update({
-      where: { stage: stageParam },
-      data: { visible: true },
+    const updated = await prisma.leadStage.update({
+      where: { id: target.id },
+      data: { archived: false, archivedAt: null },
     });
 
     await prisma.auditLog.create({
       data: {
         actorUserId: req.user!.id,
         actorType: 'user',
-        entityType: 'stage_config',
-        entityId: stageParam,
+        entityType: 'lead_stage',
+        entityId: target.id,
         action: 'stage.restored',
-        after: { visible: true },
+        after: { archived: false },
       },
     });
 
+    invalidateLeadStageCache();
     res.json({ data: toDto(updated) });
+  }),
+);
+
+router.delete(
+  '/:idOrSlug',
+  requireAuth,
+  requireRole('diretor'),
+  asyncHandler(async (req, res) => {
+    const input = ArchiveStageSchema.parse(req.query.moveLeadsTo ? req.query : req.body ?? {});
+
+    const result = await prisma.$transaction(async (tx) => {
+      const target = await findByIdOrSlug(req.params.idOrSlug, tx);
+      if (!target) return { ok: false as const, error: 'stage_not_found' as const };
+
+      const leadsInStage = await tx.lead.count({ where: { stageId: target.id } });
+      const destination = input.moveLeadsTo ? await findByIdOrSlug(input.moveLeadsTo, tx) : null;
+
+      const decision = resolveStageDelete({
+        target: { slug: target.slug, systemic: target.systemic },
+        leadsInStage,
+        destination: destination ? { id: destination.id, archived: destination.archived } : null,
+        sameStage: destination?.id === target.id,
+      });
+      if (!decision.ok) return { ok: false as const, error: decision.reason };
+
+      let movedCount = 0;
+      if (decision.moveLeads) {
+        const moveResult = await tx.lead.updateMany({
+          where: { stageId: target.id },
+          data: { stageId: decision.destinationId },
+        });
+        movedCount = moveResult.count;
+      }
+
+      await tx.leadStage.delete({ where: { id: target.id } });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'lead_stage',
+          entityId: target.id,
+          action: 'stage.deleted',
+          before: { slug: target.slug, label: target.label, leadsInStage },
+          after: { movedTo: decision.moveLeads ? decision.destinationId : null, movedCount },
+        },
+      });
+
+      return { ok: true as const, movedCount };
+    });
+
+    if (!result.ok) {
+      const map: Record<string, { status: number; message: string }> = {
+        stage_not_found: { status: 404, message: 'Etapa nao encontrada.' },
+        systemic_stage: { status: 400, message: 'Etapa sistemica nao pode ser excluida.' },
+        destination_required: {
+          status: 400,
+          message: 'A etapa tem leads — informe `moveLeadsTo`.',
+        },
+        destination_not_found: { status: 404, message: 'Etapa de destino nao encontrada.' },
+        destination_archived: { status: 400, message: 'Etapa de destino esta arquivada.' },
+        destination_same_as_source: {
+          status: 400,
+          message: 'Destino nao pode ser a propria etapa que sera excluida.',
+        },
+      };
+      const mapped = map[result.error] ?? { status: 400, message: 'Operacao invalida.' };
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    invalidateLeadStageCache();
+    res.json({ data: { movedCount: result.movedCount } });
   }),
 );
 
@@ -253,38 +381,31 @@ router.post(
   requireRole('diretor'),
   asyncHandler(async (req, res) => {
     const input = ReorderSchema.parse(req.body);
-
-    const current = await prisma.stageConfig.findMany({ orderBy: { order: 'asc' } });
+    const current = await prisma.leadStage.findMany({ orderBy: { order: 'asc' } });
 
     const check = validateStageReorder({
-      current: current.map(toDomainInput),
-      newOrder: input.order.map((o) => ({ stage: o.stage as LeadStageSlug, order: o.order })),
+      currentIds: current.map((s) => s.id),
+      newOrder: input.order,
     });
     if (!check.ok) {
       const map: Record<string, string> = {
         incomplete: 'A lista nao cobre todas as etapas.',
-        duplicate_order: 'Ha ordens duplicadas na lista.',
+        duplicate_order: 'Ha ordens duplicadas.',
         unknown_stage: 'Etapa desconhecida na lista.',
       };
       throw new ApiError(400, check.reason, map[check.reason] ?? 'Reorder invalido.');
     }
 
-    // Postgres exige ordens unicas. Pra evitar colisao no @@unique([order]),
-    // primeiro joga todas pra um espaco negativo, depois reposiciona.
     await prisma.$transaction(async (tx) => {
+      // 1a passada: joga todos pra ordens negativas (evita colisao @@unique).
       let temp = -1;
       for (const stage of current) {
-        await tx.stageConfig.update({
-          where: { stage: stage.stage },
-          data: { order: temp },
-        });
+        await tx.leadStage.update({ where: { id: stage.id }, data: { order: temp } });
         temp -= 1;
       }
+      // 2a passada: aplica a ordem nova.
       for (const item of input.order) {
-        await tx.stageConfig.update({
-          where: { stage: item.stage as LeadStage },
-          data: { order: item.order },
-        });
+        await tx.leadStage.update({ where: { id: item.id }, data: { order: item.order } });
       }
     });
 
@@ -292,16 +413,48 @@ router.post(
       data: {
         actorUserId: req.user!.id,
         actorType: 'user',
-        entityType: 'stage_config',
+        entityType: 'lead_stage',
         entityId: 'reorder',
         action: 'stage.reordered',
         after: { order: input.order },
       },
     });
 
-    const updated = await prisma.stageConfig.findMany({ orderBy: { order: 'asc' } });
+    invalidateLeadStageCache();
+    const updated = await prisma.leadStage.findMany({ orderBy: { order: 'asc' } });
     res.json({ data: updated.map(toDto) });
   }),
 );
+
+// Helpers internos -----------------------------------------------------------
+
+type TxLike = Pick<typeof prisma, 'leadStage'>;
+
+async function findByIdOrSlug(idOrSlug: string, tx?: TxLike): Promise<LeadStage | null> {
+  const db = tx ?? prisma;
+  // Tenta por slug primeiro (mais legivel/comum nos PATCH); cai pra id se nao
+  // encontrar. Slugs sao unicos, ids tambem — sem ambiguidade.
+  const bySlug = await db.leadStage.findUnique({ where: { slug: idOrSlug } });
+  if (bySlug) return bySlug;
+  return db.leadStage.findUnique({ where: { id: idOrSlug } });
+}
+
+async function openOrderSpace(
+  tx: { leadStage: { findMany: typeof prisma.leadStage.findMany; update: typeof prisma.leadStage.update } },
+  startingOrder: number,
+): Promise<void> {
+  const toShift = await tx.leadStage.findMany({
+    where: { order: { gte: startingOrder } },
+    orderBy: { order: 'desc' },
+  });
+  let temp = -1;
+  for (const stage of toShift) {
+    await tx.leadStage.update({ where: { id: stage.id }, data: { order: temp } });
+    temp -= 1;
+  }
+  for (const stage of toShift) {
+    await tx.leadStage.update({ where: { id: stage.id }, data: { order: stage.order + 1 } });
+  }
+}
 
 export default router;

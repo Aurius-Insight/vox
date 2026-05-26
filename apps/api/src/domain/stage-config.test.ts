@@ -1,138 +1,240 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveStageArchive,
+  resolveStageCreate,
+  resolveStageDelete,
   validateStageReorder,
-  type StageConfigInput,
 } from './stage-config.js';
 
-const base = (overrides: Partial<StageConfigInput> = {}): StageConfigInput => ({
-  stage: 'pre_agendamento',
-  label: 'Pre-agendamento',
-  order: 3,
-  visible: true,
-  systemic: false,
-  ...overrides,
+describe('resolveStageCreate', () => {
+  it('aceita slug e label validos', () => {
+    expect(
+      resolveStageCreate({
+        label: 'Em negociacao',
+        slug: 'em_negociacao',
+        existingSlugs: ['novo_lead', 'matriculado'],
+        existingOrders: [1, 2],
+        kind: 'active',
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it('rejeita slug com caracteres invalidos', () => {
+    expect(
+      resolveStageCreate({
+        label: 'X',
+        slug: 'em-negociacao',
+        existingSlugs: [],
+        existingOrders: [],
+        kind: 'active',
+      }),
+    ).toEqual({ ok: false, reason: 'invalid_slug' });
+  });
+
+  it('rejeita slug ja existente', () => {
+    expect(
+      resolveStageCreate({
+        label: 'X',
+        slug: 'matriculado',
+        existingSlugs: ['matriculado'],
+        existingOrders: [1],
+        kind: 'active',
+      }),
+    ).toEqual({ ok: false, reason: 'slug_taken' });
+  });
+
+  it('rejeita label vazio', () => {
+    expect(
+      resolveStageCreate({
+        label: '   ',
+        slug: 'algo',
+        existingSlugs: [],
+        existingOrders: [],
+        kind: 'active',
+      }),
+    ).toEqual({ ok: false, reason: 'invalid_label' });
+  });
 });
 
 describe('resolveStageArchive', () => {
-  it('permite arquivar etapa nao-sistemica sem leads', () => {
-    const result = resolveStageArchive({
-      target: base(),
-      leadsInStage: 0,
-      destination: null,
-      destinationConfig: null,
-    });
-    expect(result).toEqual({ ok: true, moveLeads: false });
+  const target = (overrides: Partial<{ slug: string; systemic: boolean; archived: boolean }> = {}) => ({
+    slug: 'pre_agendamento',
+    systemic: false,
+    archived: false,
+    ...overrides,
+  });
+
+  it('arquiva etapa nao-sistemica sem leads sem precisar de destino', () => {
+    expect(
+      resolveStageArchive({
+        target: target(),
+        leadsInStage: 0,
+        destination: null,
+        sameStage: false,
+      }),
+    ).toEqual({ ok: true, moveLeads: false });
   });
 
   it('bloqueia archive de etapa sistemica', () => {
-    const result = resolveStageArchive({
-      target: base({ stage: 'matriculado', systemic: true }),
-      leadsInStage: 0,
-      destination: null,
-      destinationConfig: null,
-    });
-    expect(result).toEqual({ ok: false, reason: 'systemic_stage' });
+    expect(
+      resolveStageArchive({
+        target: target({ systemic: true }),
+        leadsInStage: 0,
+        destination: null,
+        sameStage: false,
+      }),
+    ).toEqual({ ok: false, reason: 'systemic_stage' });
   });
 
-  it('exige destino quando ha leads na etapa', () => {
-    const result = resolveStageArchive({
-      target: base(),
-      leadsInStage: 12,
-      destination: null,
-      destinationConfig: null,
-    });
-    expect(result).toEqual({ ok: false, reason: 'destination_required' });
+  it('bloqueia archive de etapa ja arquivada', () => {
+    expect(
+      resolveStageArchive({
+        target: target({ archived: true }),
+        leadsInStage: 0,
+        destination: null,
+        sameStage: false,
+      }),
+    ).toEqual({ ok: false, reason: 'already_archived' });
   });
 
-  it('rejeita destino igual a origem', () => {
-    const result = resolveStageArchive({
-      target: base({ stage: 'pre_agendamento' }),
-      leadsInStage: 12,
-      destination: 'pre_agendamento',
-      destinationConfig: base({ stage: 'pre_agendamento' }),
-    });
-    expect(result).toEqual({ ok: false, reason: 'destination_same_as_source' });
-  });
-
-  it('rejeita destino que nao existe', () => {
-    const result = resolveStageArchive({
-      target: base(),
-      leadsInStage: 12,
-      destination: 'matriculado',
-      destinationConfig: null,
-    });
-    expect(result).toEqual({ ok: false, reason: 'destination_not_found' });
+  it('exige destino quando ha leads', () => {
+    expect(
+      resolveStageArchive({
+        target: target(),
+        leadsInStage: 12,
+        destination: null,
+        sameStage: false,
+      }),
+    ).toEqual({ ok: false, reason: 'destination_required' });
   });
 
   it('rejeita destino arquivado', () => {
-    const result = resolveStageArchive({
-      target: base(),
-      leadsInStage: 12,
-      destination: 'perdido',
-      destinationConfig: base({ stage: 'perdido', visible: false }),
-    });
-    expect(result).toEqual({ ok: false, reason: 'destination_archived' });
+    expect(
+      resolveStageArchive({
+        target: target(),
+        leadsInStage: 12,
+        destination: { id: 'st_perdido', archived: true },
+        sameStage: false,
+      }),
+    ).toEqual({ ok: false, reason: 'destination_archived' });
   });
 
-  it('aceita move com destino valido', () => {
-    const result = resolveStageArchive({
-      target: base(),
-      leadsInStage: 12,
-      destination: 'em_atendimento',
-      destinationConfig: base({ stage: 'em_atendimento' }),
-    });
-    expect(result).toEqual({ ok: true, moveLeads: true, destination: 'em_atendimento' });
+  it('rejeita destino igual a origem', () => {
+    expect(
+      resolveStageArchive({
+        target: target(),
+        leadsInStage: 12,
+        destination: { id: 'st_pre_agendamento', archived: false },
+        sameStage: true,
+      }),
+    ).toEqual({ ok: false, reason: 'destination_same_as_source' });
+  });
+
+  it('move leads quando destino e valido', () => {
+    expect(
+      resolveStageArchive({
+        target: target(),
+        leadsInStage: 12,
+        destination: { id: 'st_em_atendimento', archived: false },
+        sameStage: false,
+      }),
+    ).toEqual({ ok: true, moveLeads: true, destinationId: 'st_em_atendimento' });
+  });
+});
+
+describe('resolveStageDelete', () => {
+  const target = (overrides: Partial<{ slug: string; systemic: boolean }> = {}) => ({
+    slug: 'pre_agendamento',
+    systemic: false,
+    ...overrides,
+  });
+
+  it('exclui sem leads e sem destino', () => {
+    expect(
+      resolveStageDelete({
+        target: target(),
+        leadsInStage: 0,
+        destination: null,
+        sameStage: false,
+      }),
+    ).toEqual({ ok: true, moveLeads: false });
+  });
+
+  it('bloqueia delete de etapa sistemica', () => {
+    expect(
+      resolveStageDelete({
+        target: target({ systemic: true }),
+        leadsInStage: 0,
+        destination: null,
+        sameStage: false,
+      }),
+    ).toEqual({ ok: false, reason: 'systemic_stage' });
+  });
+
+  it('exige destino quando ha leads', () => {
+    expect(
+      resolveStageDelete({
+        target: target(),
+        leadsInStage: 5,
+        destination: null,
+        sameStage: false,
+      }),
+    ).toEqual({ ok: false, reason: 'destination_required' });
+  });
+
+  it('move leads pra destino valido', () => {
+    expect(
+      resolveStageDelete({
+        target: target(),
+        leadsInStage: 5,
+        destination: { id: 'st_em_atendimento', archived: false },
+        sameStage: false,
+      }),
+    ).toEqual({ ok: true, moveLeads: true, destinationId: 'st_em_atendimento' });
   });
 });
 
 describe('validateStageReorder', () => {
-  it('aceita reorder com todas as etapas presentes e ordens unicas', () => {
-    const result = validateStageReorder({
-      current: [
-        base({ stage: 'novo_lead', order: 1 }),
-        base({ stage: 'em_atendimento', order: 2 }),
-        base({ stage: 'pre_agendamento', order: 3 }),
-      ],
-      newOrder: [
-        { stage: 'pre_agendamento', order: 1 },
-        { stage: 'novo_lead', order: 2 },
-        { stage: 'em_atendimento', order: 3 },
-      ],
-    });
-    expect(result).toEqual({ ok: true });
+  it('aceita lista completa com ordens unicas', () => {
+    expect(
+      validateStageReorder({
+        currentIds: ['a', 'b', 'c'],
+        newOrder: [
+          { id: 'c', order: 1 },
+          { id: 'a', order: 2 },
+          { id: 'b', order: 3 },
+        ],
+      }),
+    ).toEqual({ ok: true });
   });
 
-  it('rejeita lista incompleta (falta etapa)', () => {
-    const result = validateStageReorder({
-      current: [
-        base({ stage: 'novo_lead', order: 1 }),
-        base({ stage: 'em_atendimento', order: 2 }),
-      ],
-      newOrder: [{ stage: 'novo_lead', order: 1 }],
-    });
-    expect(result).toEqual({ ok: false, reason: 'incomplete' });
+  it('rejeita lista incompleta', () => {
+    expect(
+      validateStageReorder({
+        currentIds: ['a', 'b', 'c'],
+        newOrder: [{ id: 'a', order: 1 }],
+      }),
+    ).toEqual({ ok: false, reason: 'incomplete' });
   });
 
-  it('rejeita ordem duplicada', () => {
-    const result = validateStageReorder({
-      current: [
-        base({ stage: 'novo_lead', order: 1 }),
-        base({ stage: 'em_atendimento', order: 2 }),
-      ],
-      newOrder: [
-        { stage: 'novo_lead', order: 1 },
-        { stage: 'em_atendimento', order: 1 },
-      ],
-    });
-    expect(result).toEqual({ ok: false, reason: 'duplicate_order' });
+  it('rejeita ordens duplicadas', () => {
+    expect(
+      validateStageReorder({
+        currentIds: ['a', 'b'],
+        newOrder: [
+          { id: 'a', order: 1 },
+          { id: 'b', order: 1 },
+        ],
+      }),
+    ).toEqual({ ok: false, reason: 'duplicate_order' });
   });
 
-  it('rejeita etapa desconhecida', () => {
-    const result = validateStageReorder({
-      current: [base({ stage: 'novo_lead', order: 1 })],
-      newOrder: [{ stage: 'pre_agendamento', order: 1 }],
-    });
-    expect(result).toEqual({ ok: false, reason: 'unknown_stage' });
+  it('rejeita id desconhecido', () => {
+    expect(
+      validateStageReorder({
+        currentIds: ['a'],
+        newOrder: [{ id: 'z', order: 1 }],
+      }),
+    ).toEqual({ ok: false, reason: 'unknown_stage' });
   });
 });

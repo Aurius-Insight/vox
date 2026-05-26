@@ -68,7 +68,10 @@ const EMPTY_CONVERT: ConvertForm = {
 
 // Etapas terminais nao aceitam mais conversao (matriculado ja foi; perdido
 // virou nao-oportunidade). Para o resto, o card mostra o botao Converter.
-const TERMINAL_STAGES: ReadonlySet<LeadStage> = new Set(['matriculado', 'perdido']);
+// Terminais por slug — etapas custom com kind 'won' ou 'lost' tambem
+// deveriam entrar aqui, mas o front so conhece os sistemicos por agora.
+// (TODO: usar StageConfig.kind quando precisarmos da granularidade.)
+const TERMINAL_STAGES: ReadonlySet<string> = new Set(['matriculado', 'perdido']);
 
 const NAO_INFORMADO = 'Nao informado';
 
@@ -146,40 +149,39 @@ export function LeadsPage() {
     };
   }, [convertingLead]);
 
-  // Agrupa por etapa preservando ordem (vinda do servidor quando ja carregada,
-  // ou padrao estatico durante o load inicial).
+  // Agrupa por slug de etapa (string dinamica). Cada slug aponta pra lista
+  // de leads. Etapas sem leads aparecem como `[]` se referenciadas.
   const leadsByStage = useMemo(() => {
-    const grouped: Record<LeadStage, Lead[]> = {
-      novo_lead: [],
-      em_atendimento: [],
-      pre_agendamento: [],
-      experimental_agendada: [],
-      matriculado: [],
-      perdido: [],
-    };
-    for (const lead of leads) grouped[lead.stage].push(lead);
+    const grouped: Record<string, Lead[]> = {};
+    for (const lead of leads) {
+      const list = grouped[lead.stage] ?? [];
+      list.push(lead);
+      grouped[lead.stage] = list;
+    }
     return grouped;
   }, [leads]);
 
-  // Lista de etapas visiveis no Kanban (vinda da StageConfig, na ordem
-  // definida pelo diretor). Etapas arquivadas (`visible: false`) saem do
-  // quadro mas leads continuam no DB; aparecem se diretor restaurar.
+  // Lista de etapas visiveis no Kanban (vinda do servidor, na ordem
+  // definida pelo diretor). `slug` virou identificador estavel (substitui
+  // o antigo `stage` enum). Etapas arquivadas saem do quadro mas leads
+  // continuam no DB; aparecem se diretor restaurar.
   const visibleStages = useMemo(() => {
     if (stageConfigs.length === 0) {
-      return LEAD_STAGES.map((stage) => ({
-        stage,
-        label: LEAD_STAGE_LABELS[stage],
+      return LEAD_STAGES.map((slug) => ({
+        slug: slug as string,
+        label: LEAD_STAGE_LABELS[slug as LeadStage],
         color: null as string | null,
       }));
     }
     return stageConfigs
       .filter((s) => s.visible)
-      .map((s) => ({ stage: s.stage, label: s.label, color: s.color }));
+      .map((s) => ({ slug: s.slug, label: s.label, color: s.color }));
   }, [stageConfigs]);
 
-  const stageLabel = (stage: LeadStage): string => {
-    const config = stageConfigs.find((s) => s.stage === stage);
-    return config?.label ?? LEAD_STAGE_LABELS[stage];
+  const stageLabel = (slug: string): string => {
+    const config = stageConfigs.find((s) => s.slug === slug);
+    if (config) return config.label;
+    return LEAD_STAGE_LABELS[slug as LeadStage] ?? slug;
   };
 
   function updateField(field: keyof LeadForm, value: string) {
@@ -480,7 +482,7 @@ export function LeadsPage() {
       {loading ? (
         <section className="kanban-board" aria-hidden="true">
           {visibleStages.map((cfg) => (
-            <div key={cfg.stage} className="kanban-column">
+            <div key={cfg.slug} className="kanban-column">
               <header className="kanban-column-header">
                 <Skeleton width="100px" height="0.85rem" />
               </header>
@@ -497,11 +499,11 @@ export function LeadsPage() {
           <section className="kanban-board" aria-label="Pipeline de leads">
             {visibleStages.map((cfg) => (
               <KanbanColumn
-                key={cfg.stage}
-                stage={cfg.stage}
+                key={cfg.slug}
+                stage={cfg.slug}
                 label={cfg.label}
                 color={cfg.color}
-                leads={leadsByStage[cfg.stage]}
+                leads={leadsByStage[cfg.slug] ?? []}
                 onConvertLead={startConvert}
                 stageLabel={stageLabel}
               />
@@ -559,12 +561,12 @@ function KanbanColumn({
   onConvertLead,
   stageLabel,
 }: {
-  stage: LeadStage;
+  stage: string;
   label: string;
   color: string | null;
   leads: Lead[];
   onConvertLead: (lead: Lead) => void;
-  stageLabel: (stage: LeadStage) => string;
+  stageLabel: (stage: string) => string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
 
@@ -611,7 +613,7 @@ function LeadCard({
 }: {
   lead: Lead;
   onConvert: () => void;
-  stageLabel: (stage: LeadStage) => string;
+  stageLabel: (stage: string) => string;
 }) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: lead.id,

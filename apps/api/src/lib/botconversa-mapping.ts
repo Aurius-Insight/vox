@@ -1,11 +1,14 @@
-import type { LeadStage } from '@prisma/client';
+import type { SystemicStageSlug } from './lead-stage-cache.js';
 
 /**
- * Mapeamento das tags do BotConversa para nosso `LeadStage` + `unitInterest`.
+ * Mapeamento das tags do BotConversa para slug de etapa + `unitInterest`.
  * Isolado do banco e da rede para ser puro/testavel.
  *
  * A regra de prioridade evita inconsistencia quando um lead tem varias tags:
  * matriculado > perdido > experimental_agendada > em_atendimento > novo_lead.
+ *
+ * Retorna `SystemicStageSlug` (uniao dos 6 slugs sistemicos) — etapas custom
+ * criadas pela UI nao recebem leads via BotConversa, so via drag manual.
  */
 
 // Unidades reais da Vox RJ inferidas das tags/campanhas do painel. Cada item
@@ -22,7 +25,7 @@ const KNOWN_UNITS: ReadonlyArray<{ label: string; matcher: RegExp }> = [
 ];
 
 // Tag -> stage com prioridade. A primeira regra que casa vence.
-const TAG_STAGE_RULES: ReadonlyArray<{ pattern: RegExp; stage: LeadStage }> = [
+const TAG_STAGE_RULES: ReadonlyArray<{ pattern: RegExp; stage: SystemicStageSlug }> = [
   // Terminais — mais especificos primeiro.
   { pattern: /^CLIENTES$/i, stage: 'matriculado' },
   { pattern: /sem\s?interesse|n[aã]o\s?responde|SEMGRANA|INATIVIDADE|inativAssistGPT|ContaInat/i, stage: 'perdido' },
@@ -40,7 +43,7 @@ const TAG_STAGE_RULES: ReadonlyArray<{ pattern: RegExp; stage: LeadStage }> = [
  * Decide o stage do lead a partir das tags do BotConversa.
  * Sem tag conhecida -> `novo_lead` (assume primeiro contato).
  */
-export function deriveStage(tagNames: readonly string[]): LeadStage {
+export function deriveStage(tagNames: readonly string[]): SystemicStageSlug {
   for (const rule of TAG_STAGE_RULES) {
     if (tagNames.some((t) => rule.pattern.test(t))) return rule.stage;
   }

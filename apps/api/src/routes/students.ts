@@ -263,7 +263,7 @@ router.get(
       where: { id: req.params.studentId },
       include: {
         unit: { select: { id: true, name: true } },
-        lead: { select: { campaign: true, source: true, stage: true } },
+        lead: { select: { campaign: true, source: true, stage: { select: { slug: true } } } },
         bookings: {
           orderBy: { createdAt: 'desc' },
           take: 20,
@@ -320,7 +320,7 @@ router.get(
           ? {
               campaign: student.lead.campaign ?? undefined,
               source: student.lead.source,
-              stage: student.lead.stage,
+              stage: student.lead.stage.slug,
             }
           : undefined,
         bookings: student.bookings.map((booking) => ({

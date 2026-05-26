@@ -65,8 +65,10 @@ router.get(
       noShowCount,
     ] = await Promise.all([
       prisma.lead.count({ where: leadWhere }),
-      prisma.lead.count({ where: { stage: 'matriculado', ...leadWhere } }),
-      prisma.lead.groupBy({ by: ['stage'], where: leadWhere, _count: true }),
+      // "Conversao" agora e qualquer etapa marcada como kind='won' — assim
+      // se um dia criar `matriculado_promo` ou similar, ela e absorvida.
+      prisma.lead.count({ where: { stage: { kind: 'won' }, ...leadWhere } }),
+      prisma.lead.groupBy({ by: ['stageId'], where: leadWhere, _count: true }),
       prisma.lead.groupBy({
         by: ['campaign'],
         where: { campaign: { not: null }, ...leadWhere },
@@ -93,13 +95,24 @@ router.get(
 
     const totalCapacity = classAggregates._sum.capacity ?? 0;
 
+    // Resolve stageId -> slug pra preservar o contrato { stage: slug }
+    // que o front ja consome no card "Leads por etapa".
+    const stages = await prisma.leadStage.findMany({
+      where: { id: { in: byStageRaw.map((r) => r.stageId) } },
+      select: { id: true, slug: true },
+    });
+    const slugById = new Map(stages.map((s) => [s.id, s.slug]));
+
     res.json({
       data: {
         unitId: unitId ?? 'todas',
         availableUnits,
         leads: {
           total: totalLeads,
-          byStage: byStageRaw.map((row) => ({ stage: row.stage, count: row._count })),
+          byStage: byStageRaw.map((row) => ({
+            stage: slugById.get(row.stageId) ?? 'desconhecido',
+            count: row._count,
+          })),
           byCampaign: byCampaignRaw
             .map((row) => ({ campaign: row.campaign ?? 'Sem campanha', count: row._count }))
             .sort((a, b) => b.count - a.count),

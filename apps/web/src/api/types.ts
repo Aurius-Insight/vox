@@ -86,13 +86,21 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   perdido: 'Perdido',
 };
 
+export type LeadStageKind = 'active' | 'won' | 'lost';
+
+// Etapa do pipeline (CRUD completo via UI quando user e diretor). O `slug`
+// e estavel pros sistemicos (`novo_lead`, `matriculado`…) e gerado a partir
+// do label pros custom criados pelo operador.
 export type StageConfig = {
-  stage: LeadStage;
+  id: string;
+  slug: string;
   label: string;
   color: string | null;
   order: number;
-  visible: boolean;
+  kind: LeadStageKind;
   systemic: boolean;
+  archived: boolean;
+  visible: boolean;
 };
 
 export type Lead = {
@@ -102,7 +110,8 @@ export type Lead = {
   unitInterest: string;
   campaign?: string;
   source: string;
-  stage: LeadStage;
+  /** Slug da etapa atual. Pode ser sistemico (LeadStage) ou custom. */
+  stage: string;
 };
 
 export type StudentType = 'experimental' | 'matriculado';

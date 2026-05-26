@@ -6,6 +6,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../db/client.js';
 import { webhookLimiter } from '../middleware/rateLimit.js';
 import { ApiError, asyncHandler } from '../lib/http.js';
+import { getLeadStageIdBySlug } from '../lib/lead-stage-cache.js';
 
 const router = Router();
 
@@ -75,6 +76,7 @@ router.post(
         return { status: 'updated' as const, leadId: lead.id };
       }
 
+      const stageId = await getLeadStageIdBySlug('novo_lead', tx);
       const lead = await tx.lead.create({
         data: {
           name: payload.contact.name,
@@ -82,7 +84,7 @@ router.post(
           unitInterest: payload.fields?.unitInterest ?? 'Nao informado',
           campaign: payload.fields?.campaign,
           source: 'BotConversa',
-          stage: 'novo_lead',
+          stageId,
           botconversaContactId: payload.contact.id,
         },
       });

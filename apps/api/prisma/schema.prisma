@@ -14,23 +14,26 @@ enum Role {
   professor
 }
 
-enum LeadStage {
-  novo_lead
-  em_atendimento
-  pre_agendamento
-  experimental_agendada
-  matriculado
-  perdido
+enum LeadStageKind {
+  active
+  won
+  lost
 }
 
-model StageConfig {
-  stage     LeadStage @id
-  label     String
-  color     String?
-  order     Int       @unique
-  visible   Boolean   @default(true)
-  systemic  Boolean   @default(false)
-  updatedAt DateTime  @updatedAt
+model LeadStage {
+  id         String        @id @default(cuid())
+  slug       String        @unique
+  label      String
+  color      String?
+  order      Int           @unique
+  kind       LeadStageKind @default(active)
+  systemic   Boolean       @default(false)
+  archived   Boolean       @default(false)
+  archivedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  leads      Lead[]
 }
 
 enum AttendanceStatus {
@@ -83,17 +86,18 @@ model Lead {
   unitInterest          String
   campaign              String?
   source                String
-  stage                 LeadStage @default(novo_lead)
+  stageId               String
   responsibleUserId     String?
   botconversaContactId  String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  stage                 LeadStage      @relation(fields: [stageId], references: [id])
   bookings              ClassBooking[]
   student               Student?
 
   @@index([whatsapp])
-  @@index([stage])
+  @@index([stageId])
   @@index([campaign])
 }
 
