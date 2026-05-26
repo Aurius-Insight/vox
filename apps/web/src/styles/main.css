@@ -1196,6 +1196,12 @@ tr.row-selected {
   margin-top: 0.25rem;
 }
 
+/* Idade do lead — menor e mais discreta que as metas principais. */
+.kanban-card-age {
+  font-size: 0.72rem;
+  color: var(--text-soft);
+}
+
 /* Telefone do lead como link para o WhatsApp (wa.me). */
 .kanban-card-whatsapp {
   align-self: flex-start;

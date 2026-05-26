@@ -9,7 +9,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { ApiClientError, api } from '../api/client';
-import { whatsappLink } from '../lib/format';
+import { formatAge, formatDate, whatsappLink } from '../lib/format';
 import { Modal } from '../components/Modal';
 import { Skeleton } from '../components/Skeleton';
 import { useToast } from '../components/ToastProvider';
@@ -655,6 +655,14 @@ function LeadCard({
       <p className="kanban-card-meta">
         {lead.unitInterest} · {lead.campaign ?? lead.source}
       </p>
+      {lead.createdAt && (
+        <p
+          className="kanban-card-meta kanban-card-age"
+          title={`Entrou em ${formatDate(lead.createdAt)}`}
+        >
+          {formatAge(lead.createdAt)}
+        </p>
+      )}
       {TERMINAL_STAGES.has(lead.stage) ? (
         <span className="status-chip">{stageLabel(lead.stage)}</span>
       ) : (

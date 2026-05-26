@@ -112,6 +112,8 @@ export type Lead = {
   source: string;
   /** Slug da etapa atual. Pode ser sistemico (LeadStage) ou custom. */
   stage: string;
+  /** ISO string. Quando o lead entrou no funil — usado pra exibir idade. */
+  createdAt?: string;
 };
 
 export type StudentType = 'experimental' | 'matriculado';

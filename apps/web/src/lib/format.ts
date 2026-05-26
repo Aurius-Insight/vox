@@ -34,6 +34,40 @@ export function formatDate(value: string) {
   });
 }
 
+/**
+ * Idade relativa de um lead/registro, com janelas adaptativas:
+ *  - <1h: "agora" / "ha X min"
+ *  - <24h: "ha X h"
+ *  - <7d: "ha X dias" (ou "ontem")
+ *  - <365d: "DD/MM"
+ *  - >=365d: "DD/MM/AA"
+ *
+ * Sem dependencias externas — calcula a partir da diferenca em ms.
+ */
+export function formatAge(value: string, now: Date = new Date()): string {
+  const date = new Date(value);
+  const diffMs = now.getTime() - date.getTime();
+  if (diffMs < 0) return 'futuro';
+
+  const min = Math.floor(diffMs / 60_000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `ha ${min} min`;
+
+  const hours = Math.floor(diffMs / 3_600_000);
+  if (hours < 24) return `ha ${hours}h`;
+
+  const days = Math.floor(diffMs / 86_400_000);
+  if (days === 1) return 'ontem';
+  if (days < 7) return `ha ${days} dias`;
+
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    ...(sameYear ? {} : { year: '2-digit' }),
+  });
+}
+
 /** Formata um valor em centavos como moeda BRL. */
 export function formatCents(cents: number) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
