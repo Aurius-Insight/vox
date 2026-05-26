@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   PanelLeft,
+  Presentation,
   Settings,
   TrendingUp,
   type LucideIcon,
@@ -24,6 +25,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   '/coordenacao': CalendarDays,
   '/coordenacao/presenca': ClipboardCheck,
   '/alunos': GraduationCap,
+  '/professores': Presentation,
   '/unidades': Building2,
   '/configuracoes': Settings,
 };
@@ -56,7 +58,7 @@ export function Layout() {
       <aside className="app-sidebar">
         <div className="sidebar-top">
           <div className="brand">
-            <span className="brand-mark">Vox RJ</span>
+            <span className="brand-mark">Vox Rio</span>
             <span className="brand-sub sidebar-label">Sistema interno</span>
           </div>
           <button
