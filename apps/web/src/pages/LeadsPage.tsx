@@ -19,6 +19,7 @@ import {
   type Lead,
   type LeadStage,
   type Package,
+  type StageConfig,
   type Unit,
 } from '../api/types';
 
@@ -85,6 +86,10 @@ export function LeadsPage() {
   const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT);
   const [convertSaving, setConvertSaving] = useState(false);
 
+  // Config dinamica das etapas (ordem, labels, cor, visibilidade).
+  // Vem do servidor; fallback pros defaults estaticos enquanto carrega.
+  const [stageConfigs, setStageConfigs] = useState<StageConfig[]>([]);
+
   // Filtros do Kanban — controlam o que vai pra API.
   const [unitFilter, setUnitFilter] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -106,14 +111,16 @@ export function LeadsPage() {
       const params = new URLSearchParams({ pageSize: '500' });
       if (unitFilter) params.set('unit', unitFilter);
       if (search) params.set('search', search);
-      const [leadList, packageList, unitList] = await Promise.all([
+      const [leadList, packageList, unitList, stagesList] = await Promise.all([
         api<{ data: Lead[] }>(`/api/leads?${params}`),
         api<{ data: Package[] }>('/api/packages'),
         api<{ data: Unit[] }>('/api/units'),
+        api<{ data: StageConfig[] }>('/api/stages'),
       ]);
       setLeads(leadList.data);
       setPackages(packageList.data.filter((item) => item.active));
       setUnits(unitList.data.filter((item) => item.active));
+      setStageConfigs(stagesList.data);
     } catch {
       toast.error('Nao foi possivel carregar os leads.');
     } finally {
@@ -139,7 +146,8 @@ export function LeadsPage() {
     };
   }, [convertingLead]);
 
-  // Agrupa por etapa preservando a ordem definida em LEAD_STAGES.
+  // Agrupa por etapa preservando ordem (vinda do servidor quando ja carregada,
+  // ou padrao estatico durante o load inicial).
   const leadsByStage = useMemo(() => {
     const grouped: Record<LeadStage, Lead[]> = {
       novo_lead: [],
@@ -152,6 +160,27 @@ export function LeadsPage() {
     for (const lead of leads) grouped[lead.stage].push(lead);
     return grouped;
   }, [leads]);
+
+  // Lista de etapas visiveis no Kanban (vinda da StageConfig, na ordem
+  // definida pelo diretor). Etapas arquivadas (`visible: false`) saem do
+  // quadro mas leads continuam no DB; aparecem se diretor restaurar.
+  const visibleStages = useMemo(() => {
+    if (stageConfigs.length === 0) {
+      return LEAD_STAGES.map((stage) => ({
+        stage,
+        label: LEAD_STAGE_LABELS[stage],
+        color: null as string | null,
+      }));
+    }
+    return stageConfigs
+      .filter((s) => s.visible)
+      .map((s) => ({ stage: s.stage, label: s.label, color: s.color }));
+  }, [stageConfigs]);
+
+  const stageLabel = (stage: LeadStage): string => {
+    const config = stageConfigs.find((s) => s.stage === stage);
+    return config?.label ?? LEAD_STAGE_LABELS[stage];
+  };
 
   function updateField(field: keyof LeadForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -450,8 +479,8 @@ export function LeadsPage() {
 
       {loading ? (
         <section className="kanban-board" aria-hidden="true">
-          {LEAD_STAGES.map((stage) => (
-            <div key={stage} className="kanban-column">
+          {visibleStages.map((cfg) => (
+            <div key={cfg.stage} className="kanban-column">
               <header className="kanban-column-header">
                 <Skeleton width="100px" height="0.85rem" />
               </header>
@@ -466,12 +495,15 @@ export function LeadsPage() {
       ) : (
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
           <section className="kanban-board" aria-label="Pipeline de leads">
-            {LEAD_STAGES.map((stage) => (
+            {visibleStages.map((cfg) => (
               <KanbanColumn
-                key={stage}
-                stage={stage}
-                leads={leadsByStage[stage]}
+                key={cfg.stage}
+                stage={cfg.stage}
+                label={cfg.label}
+                color={cfg.color}
+                leads={leadsByStage[cfg.stage]}
                 onConvertLead={startConvert}
+                stageLabel={stageLabel}
               />
             ))}
           </section>
@@ -521,24 +553,37 @@ function UnitTabs({
 
 function KanbanColumn({
   stage,
+  label,
+  color,
   leads,
   onConvertLead,
+  stageLabel,
 }: {
   stage: LeadStage;
+  label: string;
+  color: string | null;
   leads: Lead[];
   onConvertLead: (lead: Lead) => void;
+  stageLabel: (stage: LeadStage) => string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
+
+  // Cor opcional pinta a borda do topo da coluna — sinal visual leve sem
+  // sobrecarregar o tema escuro/claro.
+  const style: React.CSSProperties | undefined = color
+    ? { borderTopColor: color, borderTopWidth: '3px', borderTopStyle: 'solid' }
+    : undefined;
 
   return (
     <section
       ref={setNodeRef}
       className="kanban-column"
       data-over={isOver || undefined}
-      aria-label={LEAD_STAGE_LABELS[stage]}
+      aria-label={label}
+      style={style}
     >
       <header className="kanban-column-header">
-        <span className="kanban-column-title">{LEAD_STAGE_LABELS[stage]}</span>
+        <span className="kanban-column-title">{label}</span>
         <span className="kanban-column-count">{leads.length}</span>
       </header>
       <div className="kanban-column-body">
@@ -546,7 +591,12 @@ function KanbanColumn({
           <p className="kanban-empty">—</p>
         ) : (
           leads.map((lead) => (
-            <LeadCard key={lead.id} lead={lead} onConvert={() => onConvertLead(lead)} />
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              onConvert={() => onConvertLead(lead)}
+              stageLabel={stageLabel}
+            />
           ))
         )}
       </div>
@@ -554,7 +604,15 @@ function KanbanColumn({
   );
 }
 
-function LeadCard({ lead, onConvert }: { lead: Lead; onConvert: () => void }) {
+function LeadCard({
+  lead,
+  onConvert,
+  stageLabel,
+}: {
+  lead: Lead;
+  onConvert: () => void;
+  stageLabel: (stage: LeadStage) => string;
+}) {
   const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: lead.id,
   });
@@ -596,7 +654,7 @@ function LeadCard({ lead, onConvert }: { lead: Lead; onConvert: () => void }) {
         {lead.unitInterest} · {lead.campaign ?? lead.source}
       </p>
       {TERMINAL_STAGES.has(lead.stage) ? (
-        <span className="status-chip">{LEAD_STAGE_LABELS[lead.stage]}</span>
+        <span className="status-chip">{stageLabel(lead.stage)}</span>
       ) : (
         <button
           type="button"

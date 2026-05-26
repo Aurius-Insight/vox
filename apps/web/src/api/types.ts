@@ -65,6 +65,9 @@ export type LeadStage =
   | 'matriculado'
   | 'perdido';
 
+// Ordem e labels DEFAULT — fallback quando o `/api/stages` ainda nao
+// carregou ou em telas que nao usam config dinamica (selects auxiliares).
+// Em runtime, a `StageConfig` do servidor sobreescreve.
 export const LEAD_STAGES: LeadStage[] = [
   'novo_lead',
   'em_atendimento',
@@ -81,6 +84,15 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   experimental_agendada: 'Experimental agendada',
   matriculado: 'Matriculado',
   perdido: 'Perdido',
+};
+
+export type StageConfig = {
+  stage: LeadStage;
+  label: string;
+  color: string | null;
+  order: number;
+  visible: boolean;
+  systemic: boolean;
 };
 
 export type Lead = {

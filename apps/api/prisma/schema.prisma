@@ -23,6 +23,16 @@ enum LeadStage {
   perdido
 }
 
+model StageConfig {
+  stage     LeadStage @id
+  label     String
+  color     String?
+  order     Int       @unique
+  visible   Boolean   @default(true)
+  systemic  Boolean   @default(false)
+  updatedAt DateTime  @updatedAt
+}
+
 enum AttendanceStatus {
   presente
   no_show

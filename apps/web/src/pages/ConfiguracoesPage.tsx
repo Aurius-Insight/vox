@@ -11,6 +11,7 @@ import {
 } from '../api/types';
 import { formatCents, formatDate, parseReaisToCents } from '../lib/format';
 import { Modal } from '../components/Modal';
+import { PipelineConfigPanel } from '../components/PipelineConfigPanel';
 import { useToast } from '../components/ToastProvider';
 
 type PackageForm = {
@@ -546,6 +547,8 @@ export function ConfiguracoesPage() {
           </tbody>
         </table>
       </section>
+
+      <PipelineConfigPanel />
     </main>
   );
 }
