@@ -965,12 +965,43 @@ tbody tr:last-child td {
   margin: 0;
 }
 
-/* Master-detail (Alunos) */
+/* Master-detail (Alunos). Quando nenhum aluno esta selecionado, a tabela
+   ocupa o espaco inteiro pra nao cortar coluna a direita. */
 .split-grid {
   align-items: start;
   display: grid;
   gap: 1.25rem;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+}
+
+.split-grid-collapsed {
+  grid-template-columns: 1fr;
+}
+
+.split-grid .table-card {
+  overflow-x: auto;
+}
+
+/* Barra de filtros da pagina de Alunos. */
+.alunos-filtros {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+}
+
+.alunos-filtros .alunos-search {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.alunos-filtros select {
+  min-width: 160px;
+}
+
+.alunos-filtros .alunos-count {
+  margin-left: auto;
 }
 
 .split-grid .table-card tbody tr {

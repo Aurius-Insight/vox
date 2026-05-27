@@ -11,6 +11,9 @@ export const ROLE_LABELS: Record<Role, string> = {
 export type Subject = {
   id: string;
   name: string;
+  description?: string | null;
+  active?: boolean;
+  createdAt?: string;
 };
 
 export type UnitRef = {

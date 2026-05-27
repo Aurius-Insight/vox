@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import type {
@@ -70,6 +70,26 @@ export function AlunosPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [selected, setSelected] = useState<StudentDetail>();
+
+  // Filtros da listagem. Aplicados client-side em cima de `students` ja
+  // carregados — a base inteira fica em memoria (algumas centenas de alunos).
+  // Se a base crescer muito, mover pra query do servidor (?search/?unit/?type).
+  const [search, setSearch] = useState('');
+  const [unitFilter, setUnitFilter] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<'todos' | 'matriculado' | 'experimental'>('todos');
+
+  const visibleStudents = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return students.filter((student) => {
+      if (typeFilter !== 'todos' && student.type !== typeFilter) return false;
+      if (unitFilter && student.unitId !== unitFilter) return false;
+      if (query) {
+        const haystack = `${student.name} ${student.enrollmentCode}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+  }, [students, search, unitFilter, typeFilter]);
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
@@ -650,7 +670,44 @@ export function AlunosPage() {
         </Modal>
       )}
 
-      <div className="split-grid">
+      <section className="table-card alunos-filtros">
+        <input
+          type="search"
+          placeholder="Buscar por nome ou matricula"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="alunos-search"
+          aria-label="Buscar aluno"
+        />
+        <select
+          value={unitFilter}
+          onChange={(event) => setUnitFilter(event.target.value)}
+          aria-label="Filtrar por escola"
+        >
+          <option value="">Todas as escolas</option>
+          {units
+            .filter((unit) => unit.active)
+            .map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
+              </option>
+            ))}
+        </select>
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}
+          aria-label="Filtrar por tipo"
+        >
+          <option value="todos">Todos os tipos</option>
+          <option value="matriculado">Matriculado</option>
+          <option value="experimental">Experimental</option>
+        </select>
+        <span className="muted-text alunos-count">
+          {visibleStudents.length} de {students.length}
+        </span>
+      </section>
+
+      <div className={selected ? 'split-grid' : 'split-grid split-grid-collapsed'}>
         <section className="table-card">
           <table>
             <thead>
@@ -658,18 +715,22 @@ export function AlunosPage() {
                 <th>Aluno</th>
                 <th>Tipo</th>
                 <th>Matricula</th>
-                <th>Unidade</th>
+                <th>Escola</th>
                 <th>Saldo</th>
                 <th>Acesso</th>
               </tr>
             </thead>
             <tbody>
-              {students.length === 0 && (
+              {visibleStudents.length === 0 && (
                 <tr>
-                  <td colSpan={6}>Nenhum aluno cadastrado.</td>
+                  <td colSpan={6}>
+                    {students.length === 0
+                      ? 'Nenhum aluno cadastrado.'
+                      : 'Nenhum aluno encontrado com esses filtros.'}
+                  </td>
                 </tr>
               )}
-              {students.map((student) => (
+              {visibleStudents.map((student) => (
                 <tr
                   key={student.id}
                   className={selected?.id === student.id ? 'row-selected' : undefined}

@@ -32,7 +32,7 @@ export function UnidadesPage() {
       const response = await api<{ data: Unit[] }>('/api/units');
       setUnits(response.data);
     } catch {
-      toast.error('Nao foi possivel carregar as unidades.');
+      toast.error('Nao foi possivel carregar as escolas.');
     }
   }, [toast]);
 
@@ -98,7 +98,7 @@ export function UnidadesPage() {
       await load();
     } catch (err) {
       toast.error(
-        err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar a unidade.',
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar a escola.',
       );
     } finally {
       setSaving(false);
@@ -118,7 +118,7 @@ export function UnidadesPage() {
       );
     } catch (err) {
       toast.error(
-        err instanceof ApiClientError ? err.message : 'Nao foi possivel atualizar a unidade.',
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel atualizar a escola.',
       );
     } finally {
       setPendingUnitId(undefined);
@@ -129,19 +129,19 @@ export function UnidadesPage() {
     <main className="app-page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Unidades</p>
-          <h1>Gestao de unidades</h1>
+          <p className="eyebrow">Escolas</p>
+          <h1>Gestao de escolas</h1>
         </div>
         <div className="row-actions">
           <button type="button" onClick={openNew}>
-            Nova unidade
+            Nova escola
           </button>
         </div>
       </header>
 
       {showForm && (
         <Modal
-          title={editingUnitId ? 'Editar unidade' : 'Nova unidade'}
+          title={editingUnitId ? 'Editar escola' : 'Nova escola'}
           onClose={closeForm}
         >
           <form className="grid-form" onSubmit={handleSubmit}>
@@ -182,7 +182,7 @@ export function UnidadesPage() {
           <div className="grid-form-actions">
             <div className="row-actions">
               <button type="submit" disabled={saving}>
-                {saving ? 'Salvando...' : editingUnitId ? 'Salvar alteracoes' : 'Criar unidade'}
+                {saving ? 'Salvando...' : editingUnitId ? 'Salvar alteracoes' : 'Criar escola'}
               </button>
               <button type="button" className="secondary-button" onClick={closeForm}>
                 Cancelar
@@ -197,7 +197,7 @@ export function UnidadesPage() {
         <table>
           <thead>
             <tr>
-              <th>Unidade</th>
+              <th>Escola</th>
               <th>Endereco</th>
               <th>Telefone</th>
               <th>Capacidade</th>
@@ -208,7 +208,7 @@ export function UnidadesPage() {
           <tbody>
             {units.length === 0 && (
               <tr>
-                <td colSpan={6}>Nenhuma unidade cadastrada.</td>
+                <td colSpan={6}>Nenhuma escola cadastrada.</td>
               </tr>
             )}
             {units.map((unit) => (
