@@ -29,10 +29,33 @@ type PortalClass = {
   isBooked: boolean;
 };
 
+type HistoryStatus = 'presente' | 'no_show' | 'cancelado' | 'sem_registro';
+
+type PortalHistoryItem = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  displayName: string;
+  unit: string | null;
+  teacher: string | null;
+  status: HistoryStatus;
+  creditConsumed: boolean;
+};
+
+const HISTORY_STATUS_LABEL: Record<HistoryStatus, string> = {
+  presente: 'Presente',
+  no_show: 'Falta',
+  cancelado: 'Cancelada',
+  sem_registro: 'Sem registro',
+};
+
 export function PortalHomePage() {
   const navigate = useNavigate();
   const [student, setStudent] = useState<PortalStudent>();
   const [classes, setClasses] = useState<PortalClass[]>([]);
+  const [history, setHistory] = useState<PortalHistoryItem[]>([]);
+  const [tab, setTab] = useState<'proximas' | 'historico'>('proximas');
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [pendingId, setPendingId] = useState<string>();
   const [error, setError] = useState('');
@@ -53,6 +76,28 @@ export function PortalHomePage() {
       setError('Nao foi possivel carregar seus dados agora.');
     }
   }, []);
+
+  // Historico tem lazy load — so busca quando o aluno trocar pra tab. Evita
+  // payload extra no primeiro paint do portal (caminho mais comum: agendar).
+  const loadHistory = useCallback(async () => {
+    try {
+      const response = await api<{ data: PortalHistoryItem[] }>('/api/portal/history');
+      setHistory(response.data);
+      setHistoryLoaded(true);
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status === 401) {
+        setUnauthenticated(true);
+        return;
+      }
+      setError('Nao foi possivel carregar o historico.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'historico' && !historyLoaded) {
+      void loadHistory();
+    }
+  }, [tab, historyLoaded, loadHistory]);
 
   useEffect(() => {
     void load();
@@ -155,8 +200,56 @@ export function PortalHomePage() {
 
       <section className="portal-section">
         <div className="section-title">
-          <h2>Proximas aulas</h2>
+          <h2>Minhas aulas</h2>
+          <nav className="detail-tabs" aria-label="Filtro de aulas">
+            <button
+              type="button"
+              className={tab === 'proximas' ? 'is-active' : ''}
+              onClick={() => setTab('proximas')}
+            >
+              Proximas
+            </button>
+            <button
+              type="button"
+              className={tab === 'historico' ? 'is-active' : ''}
+              onClick={() => setTab('historico')}
+            >
+              Historico
+            </button>
+          </nav>
         </div>
+
+        {tab === 'historico' && (
+          <div className="class-list">
+            {!historyLoaded && <p className="empty-state">Carregando historico...</p>}
+            {historyLoaded && history.length === 0 && (
+              <p className="empty-state">Nenhuma aula no seu historico ainda.</p>
+            )}
+            {history.map((item) => (
+              <article key={item.id} className="class-card">
+                <div className="class-date">
+                  <span>{formatMonth(item.startsAt)}</span>
+                  <strong>{formatDay(item.startsAt)}</strong>
+                </div>
+                <div className="class-info">
+                  <span
+                    className="status-chip"
+                    data-status={item.status}
+                  >
+                    {HISTORY_STATUS_LABEL[item.status]}
+                  </span>
+                  <strong>{item.displayName}</strong>
+                  <span>
+                    {formatTime(item.startsAt)} - {item.unit ?? 'Sem unidade'}
+                    {item.teacher ? ` - ${item.teacher}` : ''}
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {tab === 'proximas' && (
         <div className="class-list">
           {classes.length === 0 && <p className="empty-state">Nenhuma aula disponivel no momento.</p>}
           {classes.map((item) => {
@@ -195,6 +288,7 @@ export function PortalHomePage() {
             );
           })}
         </div>
+        )}
       </section>
     </main>
   );

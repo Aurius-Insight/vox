@@ -272,6 +272,78 @@ router.get(
   }),
 );
 
+// Historico do aluno: aulas que ja aconteceram (ou estao no passado) onde o
+// aluno tinha agendamento ou teve a presenca marcada. Inclui no-show pra que
+// o aluno entenda o consumo de saldo. So matriculas (portal e exclusivo de
+// matriculado, mesma regra do /me).
+router.get(
+  '/history',
+  requirePortalStudent,
+  asyncHandler(async (req, res) => {
+    const studentId = req.student!.id;
+    const now = new Date();
+
+    // Pega tudo que esta no passado e que se vincula ao aluno por Attendance
+    // OU por ClassBooking. Attendance e a fonte de verdade (presente/no_show);
+    // ClassBooking captura aulas onde o aluno se inscreveu mas o professor
+    // ainda nao marcou (vai aparecer com status "sem registro"). Tudo no mesmo
+    // SELECT pra evitar two-trip + merge em memoria.
+    const sessions = await prisma.classSession.findMany({
+      where: {
+        startsAt: { lt: now },
+        canceledAt: null,
+        OR: [
+          { attendances: { some: { studentId } } },
+          { bookings: { some: { studentId, status: { in: ['agendado', 'cancelado'] } } } },
+        ],
+      },
+      orderBy: { startsAt: 'desc' },
+      take: 200,
+      include: {
+        subject: { select: { name: true } },
+        unit: { select: { name: true } },
+        teacher: { select: { name: true } },
+        attendances: {
+          where: { studentId },
+          select: { status: true, creditConsumed: true },
+        },
+        bookings: {
+          where: { studentId },
+          select: { status: true },
+        },
+      },
+    });
+
+    const data = sessions.map((session) => {
+      const attendance = session.attendances[0];
+      const booking = session.bookings[0];
+      // Status do ponto de vista do aluno:
+      //  presente / no_show  → presenca marcada pelo professor
+      //  cancelado           → aluno cancelou antes
+      //  sem_registro        → estava agendado mas ninguem marcou (raro)
+      const status: 'presente' | 'no_show' | 'cancelado' | 'sem_registro' =
+        attendance?.status ?? (booking?.status === 'cancelado' ? 'cancelado' : 'sem_registro');
+
+      return {
+        id: session.id,
+        startsAt: session.startsAt.toISOString(),
+        endsAt: session.endsAt.toISOString(),
+        // Aulas legadas absorvidas das planilhas nao tem subject — mostramos
+        // como "Aula registrada". Aula de convidado idem (sem detalhe).
+        displayName: session.isGuest
+          ? 'Professor convidado'
+          : (session.subject?.name ?? 'Aula registrada'),
+        unit: session.unit?.name ?? null,
+        teacher: session.isGuest ? null : (session.teacher?.name ?? null),
+        status,
+        creditConsumed: attendance?.creditConsumed ?? false,
+      };
+    });
+
+    res.json({ data });
+  }),
+);
+
 const bookingErrorMap: Record<string, { status: number; code: string; message: string }> = {
   no_credit: { status: 409, code: 'no_credit', message: 'Sem saldo de creditos para agendar.' },
   class_full: { status: 409, code: 'class_full', message: 'Aula sem vagas disponiveis.' },

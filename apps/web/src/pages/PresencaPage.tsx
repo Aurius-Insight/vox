@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { ClassSession, StudentType } from '../api/types';
 import { formatDateTime } from '../lib/format';
@@ -22,6 +22,8 @@ type StudentResult = {
   unitName: string | null;
 };
 
+type ClassBucket = 'hoje' | 'proximas' | 'historico';
+
 export function PresencaPage() {
   const [classes, setClasses] = useState<ClassSession[]>([]);
   const [pendingKey, setPendingKey] = useState<string>();
@@ -30,7 +32,34 @@ export function PresencaPage() {
   const [results, setResults] = useState<StudentResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [bookingId, setBookingId] = useState<string>();
+  const [tab, setTab] = useState<ClassBucket>('hoje');
   const toast = useToast();
+
+  // Divide as aulas em 3 baldes via startsAt comparado a "hoje" no fuso
+  // local. Historico = passadas (ordenadas mais recente -> mais antigo);
+  // Hoje = mesmo dia local; Proximas = futuras a partir de amanha.
+  const buckets = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(start);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    const hoje: ClassSession[] = [];
+    const proximas: ClassSession[] = [];
+    const historico: ClassSession[] = [];
+
+    for (const item of classes) {
+      const dt = new Date(item.startsAt);
+      if (dt < start) historico.push(item);
+      else if (dt < endOfDay) hoje.push(item);
+      else proximas.push(item);
+    }
+    // Historico mais recente primeiro pra leitura natural.
+    historico.reverse();
+    return { hoje, proximas, historico };
+  }, [classes]);
+
+  const visibleClasses = buckets[tab];
 
   const load = useCallback(async () => {
     try {
@@ -190,10 +219,43 @@ export function PresencaPage() {
         </Modal>
       )}
 
+      <nav className="detail-tabs" aria-label="Filtro de aulas">
+        <button
+          type="button"
+          className={tab === 'hoje' ? 'is-active' : ''}
+          onClick={() => setTab('hoje')}
+        >
+          Hoje ({buckets.hoje.length})
+        </button>
+        <button
+          type="button"
+          className={tab === 'proximas' ? 'is-active' : ''}
+          onClick={() => setTab('proximas')}
+        >
+          Proximas ({buckets.proximas.length})
+        </button>
+        <button
+          type="button"
+          className={tab === 'historico' ? 'is-active' : ''}
+          onClick={() => setTab('historico')}
+        >
+          Historico ({buckets.historico.length})
+        </button>
+      </nav>
+
       {classes.length === 0 && <p className="muted-text">Nenhuma aula cadastrada.</p>}
+      {classes.length > 0 && visibleClasses.length === 0 && (
+        <p className="muted-text">
+          {tab === 'hoje'
+            ? 'Nenhuma aula hoje.'
+            : tab === 'proximas'
+              ? 'Nenhuma aula futura agendada.'
+              : 'Nenhuma aula no historico.'}
+        </p>
+      )}
 
       <div className="stack">
-        {classes.map((classSession) => (
+        {visibleClasses.map((classSession) => (
           <section key={classSession.id} className="table-card">
             <div className="table-card-header">
               <div>

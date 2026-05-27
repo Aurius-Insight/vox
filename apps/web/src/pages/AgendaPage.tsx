@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiClientError, api } from '../api/client';
 import type { AppUser, ClassSession, Subject, Unit } from '../api/types';
 import { formatDateTime, isoToLocalInput, localInputToIso } from '../lib/format';
@@ -38,7 +38,32 @@ export function AgendaPage() {
   const [teachers, setTeachers] = useState<AppUser[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [form, setForm] = useState<ClassForm>(EMPTY_FORM);
+  const [tab, setTab] = useState<'hoje' | 'proximas' | 'historico'>('hoje');
   const toast = useToast();
+
+  // Divide as aulas em 3 baldes pela data (Hoje, Proximas, Historico).
+  // Mesma logica da Presenca pra UX consistente.
+  const buckets = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(start);
+    endOfDay.setDate(endOfDay.getDate() + 1);
+
+    const hoje: ClassSession[] = [];
+    const proximas: ClassSession[] = [];
+    const historico: ClassSession[] = [];
+
+    for (const item of classes) {
+      const dt = new Date(item.startsAt);
+      if (dt < start) historico.push(item);
+      else if (dt < endOfDay) hoje.push(item);
+      else proximas.push(item);
+    }
+    historico.reverse();
+    return { hoje, proximas, historico };
+  }, [classes]);
+
+  const visibleClasses = buckets[tab];
   // setError/setInfo encaminham para o sistema de toasts (mensagem vazia = no-op).
   const setError = (message: string) => {
     if (message) toast.error(message);
@@ -388,6 +413,30 @@ export function AgendaPage() {
         </Modal>
       )}
 
+      <nav className="detail-tabs" aria-label="Filtro de aulas">
+        <button
+          type="button"
+          className={tab === 'hoje' ? 'is-active' : ''}
+          onClick={() => setTab('hoje')}
+        >
+          Hoje ({buckets.hoje.length})
+        </button>
+        <button
+          type="button"
+          className={tab === 'proximas' ? 'is-active' : ''}
+          onClick={() => setTab('proximas')}
+        >
+          Proximas ({buckets.proximas.length})
+        </button>
+        <button
+          type="button"
+          className={tab === 'historico' ? 'is-active' : ''}
+          onClick={() => setTab('historico')}
+        >
+          Historico ({buckets.historico.length})
+        </button>
+      </nav>
+
       <section className="table-card">
         <table>
           <thead>
@@ -401,12 +450,20 @@ export function AgendaPage() {
             </tr>
           </thead>
           <tbody>
-            {classes.length === 0 && (
+            {visibleClasses.length === 0 && (
               <tr>
-                <td colSpan={6}>Nenhuma aula cadastrada.</td>
+                <td colSpan={6}>
+                  {classes.length === 0
+                    ? 'Nenhuma aula cadastrada.'
+                    : tab === 'hoje'
+                      ? 'Nenhuma aula hoje.'
+                      : tab === 'proximas'
+                        ? 'Nenhuma aula futura agendada.'
+                        : 'Nenhuma aula no historico.'}
+                </td>
               </tr>
             )}
-            {classes.map((classSession) => (
+            {visibleClasses.map((classSession) => (
               <tr key={classSession.id}>
                 <td>{classSession.displayName}</td>
                 <td>{classSession.teacherName ?? '-'}</td>
