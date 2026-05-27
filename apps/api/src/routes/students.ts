@@ -7,6 +7,7 @@ import { ApiError, asyncHandler, maskCpf, maskPhone } from '../lib/http.js';
 import { hashCpf, normalizeCpf } from '../lib/cpf.js';
 import { uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
+import { withEnrollmentCodeRetry } from '../lib/enrollment-retry.js';
 import {
   buildStudentTimeline,
   computeStudentKpis,
@@ -117,7 +118,9 @@ router.post(
       throw new ApiError(403, 'unit_scope', 'Voce so pode cadastrar alunos na sua unidade.');
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const whatsappDigits = input.whatsapp.replace(/\D/g, '');
+
+    const result = await withEnrollmentCodeRetry(() => prisma.$transaction(async (tx) => {
       const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
       if (!unit) return { ok: false as const, error: 'unit_not_found' as const };
 
@@ -141,6 +144,21 @@ router.post(
         cpfMaskedValue = maskCpf(cpfDigits) ?? null;
       }
 
+      // Dedup por whatsapp: sem CPF, e o unico campo que evita duplicata.
+      // Bloqueia se ja existe aluno ativo com o mesmo numero — operador
+      // deve usar o cadastro existente ou desativar antes.
+      const existingByWhatsapp = await tx.student.findFirst({
+        where: { whatsapp: whatsappDigits, active: true },
+        select: { id: true, enrollmentCode: true },
+      });
+      if (existingByWhatsapp) {
+        return {
+          ok: false as const,
+          error: 'whatsapp_already_used' as const,
+          existing: existingByWhatsapp,
+        };
+      }
+
       const enrollmentCode = await uniqueEnrollmentCode((code) =>
         tx.student.findUnique({ where: { enrollmentCode: code } }).then((found) => found !== null),
       );
@@ -148,7 +166,7 @@ router.post(
       const student = await tx.student.create({
         data: {
           name: input.name,
-          whatsapp: input.whatsapp.replace(/\D/g, ''),
+          whatsapp: whatsappDigits,
           email: input.email,
           cpfHash: cpfHashValue,
           cpfMasked: cpfMaskedValue,
@@ -174,16 +192,24 @@ router.post(
       });
 
       return { ok: true as const, student };
-    });
+    }));
 
     if (!result.ok) {
       const map: Record<string, { status: number; message: string }> = {
         unit_not_found: { status: 404, message: 'Unidade nao encontrada.' },
         package_not_found: { status: 404, message: 'Pacote nao encontrado.' },
         cpf_already_used: { status: 409, message: 'Ja existe um aluno com este CPF.' },
+        whatsapp_already_used: {
+          status: 409,
+          message: 'Ja existe um aluno ativo com este WhatsApp.',
+        },
       };
       const mapped = map[result.error];
-      throw new ApiError(mapped.status, result.error, mapped.message);
+      throw new ApiError(mapped.status, result.error, mapped.message, {
+        ...(result.error === 'whatsapp_already_used' && 'existing' in result
+          ? { existing: result.existing }
+          : {}),
+      });
     }
 
     res.status(201).json({

@@ -10,6 +10,7 @@ import { canConvertLead, uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
 import { leadSearchConditions } from '../domain/lead-search.js';
 import { getLeadStageBySlug } from '../lib/lead-stage-cache.js';
+import { withEnrollmentCodeRetry } from '../lib/enrollment-retry.js';
 
 const router = Router();
 
@@ -63,6 +64,10 @@ const conversionErrorMap: Record<string, { status: number; message: string }> = 
   package_not_found: { status: 404, message: 'Pacote nao encontrado.' },
   unit_not_found: { status: 404, message: 'Unidade nao encontrada.' },
   cpf_already_used: { status: 409, message: 'Ja existe um aluno com este CPF.' },
+  whatsapp_already_used: {
+    status: 409,
+    message: 'Ja existe um aluno ativo com este WhatsApp.',
+  },
 };
 
 // Diretor e coordenacao operam o pipeline e precisam do contato real do lead
@@ -155,7 +160,7 @@ router.patch(
     const input = UpdateStageSchema.parse(req.body);
 
     try {
-      const lead = await prisma.$transaction(async (tx) => {
+      const lead = await withEnrollmentCodeRetry(() => prisma.$transaction(async (tx) => {
         const targetStage = await tx.leadStage.findUnique({ where: { slug: input.stage } });
         if (!targetStage) {
           throw new ApiError(404, 'stage_not_found', 'Etapa nao encontrada.');
@@ -194,7 +199,7 @@ router.patch(
         }
 
         return updated;
-      });
+      }));
       res.json({ data: toLeadDto(lead, true) });
     } catch (error) {
       // P2025: registro nao encontrado. Qualquer outro erro deve propagar como 500.
@@ -230,7 +235,7 @@ router.post(
       throw new ApiError(403, 'unit_scope', 'Voce so pode matricular alunos na sua unidade.');
     }
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await withEnrollmentCodeRetry(() => prisma.$transaction(async (tx) => {
       const lead = await tx.lead.findUnique({
         where: { id: req.params.leadId },
         include: { student: { select: { id: true, type: true } }, stage: true },
@@ -269,6 +274,23 @@ router.post(
           return { ok: false as const, error: 'cpf_already_used' as const };
         }
         cpfMaskedValue = maskCpf(cpfDigits) ?? null;
+      }
+
+      // Dedup por whatsapp: so se vamos CRIAR student novo (lead nao tem
+      // student vinculado). Se ja existe outro student ativo com o mesmo
+      // whatsapp, bloqueia — provavel duplicata.
+      if (!lead.student) {
+        const existingByWhatsapp = await tx.student.findFirst({
+          where: { whatsapp: lead.whatsapp, active: true },
+          select: { id: true, enrollmentCode: true },
+        });
+        if (existingByWhatsapp) {
+          return {
+            ok: false as const,
+            error: 'whatsapp_already_used' as const,
+            existing: existingByWhatsapp,
+          };
+        }
       }
 
       // Atualiza o aluno-experimental existente (criado em "experimental_agendada")
@@ -335,14 +357,18 @@ router.post(
       });
 
       return { ok: true as const, student, lead: updatedLead };
-    });
+    }));
 
     if (!result.ok) {
       const mapped = conversionErrorMap[result.error] ?? {
         status: 409,
         message: 'Nao foi possivel converter o lead.',
       };
-      throw new ApiError(mapped.status, result.error, mapped.message);
+      throw new ApiError(mapped.status, result.error, mapped.message, {
+        ...(result.error === 'whatsapp_already_used' && 'existing' in result
+          ? { existing: result.existing }
+          : {}),
+      });
     }
 
     res.status(201).json({
