@@ -7,12 +7,14 @@ import { useToast } from '../components/ToastProvider';
 type UnitForm = {
   name: string;
   address: string;
+  phone: string;
   capacity: string;
 };
 
 const EMPTY_FORM: UnitForm = {
   name: '',
   address: '',
+  phone: '',
   capacity: '0',
 };
 
@@ -48,6 +50,7 @@ export function UnidadesPage() {
     setForm({
       name: unit.name,
       address: unit.address,
+      phone: unit.phone ?? '',
       capacity: String(unit.capacity),
     });
   }
@@ -71,11 +74,13 @@ export function UnidadesPage() {
     event.preventDefault();
     setSaving(true);
 
-    const payload = {
+    // address/phone vazios entram como string vazia/null (campo opcional).
+    const payload: Record<string, unknown> = {
       name: form.name,
       address: form.address,
-      capacity: Number(form.capacity),
+      capacity: Number(form.capacity) || 0,
     };
+    payload.phone = form.phone.trim() === '' ? null : form.phone.trim();
 
     try {
       if (editingUnitId) {
@@ -149,11 +154,19 @@ export function UnidadesPage() {
             />
           </label>
           <label>
-            Endereco
+            Endereco (opcional)
             <input
               value={form.address}
               onChange={(event) => updateField('address', event.target.value)}
-              required
+              placeholder="Rua, numero, sala, bairro"
+            />
+          </label>
+          <label>
+            Telefone / WhatsApp (opcional)
+            <input
+              value={form.phone}
+              onChange={(event) => updateField('phone', event.target.value)}
+              placeholder="21 99999-9999"
             />
           </label>
           <label>
@@ -164,7 +177,6 @@ export function UnidadesPage() {
               max={10000}
               value={form.capacity}
               onChange={(event) => updateField('capacity', event.target.value)}
-              required
             />
           </label>
           <div className="grid-form-actions">
@@ -187,6 +199,7 @@ export function UnidadesPage() {
             <tr>
               <th>Unidade</th>
               <th>Endereco</th>
+              <th>Telefone</th>
               <th>Capacidade</th>
               <th>Status</th>
               <th>Acoes</th>
@@ -195,13 +208,14 @@ export function UnidadesPage() {
           <tbody>
             {units.length === 0 && (
               <tr>
-                <td colSpan={5}>Nenhuma unidade cadastrada.</td>
+                <td colSpan={6}>Nenhuma unidade cadastrada.</td>
               </tr>
             )}
             {units.map((unit) => (
               <tr key={unit.id}>
                 <td>{unit.name}</td>
-                <td>{unit.address}</td>
+                <td>{unit.address || <span className="muted-text">—</span>}</td>
+                <td>{unit.phone || <span className="muted-text">—</span>}</td>
                 <td>{unit.capacity}</td>
                 <td>{unit.active ? 'ativa' : 'inativa'}</td>
                 <td>

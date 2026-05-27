@@ -254,6 +254,7 @@ export type Unit = {
   id: string;
   name: string;
   address: string;
+  phone: string | null;
   capacity: number;
   active: boolean;
 };

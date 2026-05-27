@@ -10,16 +10,20 @@ const router = Router();
 const VIEW_ROLES = ['diretor', 'coordenacao'] as const;
 const MANAGE_ROLES = ['diretor', 'coordenacao'] as const;
 
+// Address e phone tolerantes a string vazia = "nao preenchido" — operador
+// cadastra com so o nome e completa depois pela UI.
 const CreateUnitSchema = z.object({
   name: z.string().min(2).max(120),
-  address: z.string().min(2).max(200),
-  capacity: z.number().int().min(0).max(10_000),
+  address: z.string().max(200).optional().default(''),
+  phone: z.string().max(40).optional(),
+  capacity: z.number().int().min(0).max(10_000).optional().default(0),
 });
 
 const UpdateUnitSchema = z
   .object({
     name: z.string().min(2).max(120).optional(),
-    address: z.string().min(2).max(200).optional(),
+    address: z.string().max(200).optional(),
+    phone: z.string().max(40).nullable().optional(),
     capacity: z.number().int().min(0).max(10_000).optional(),
     active: z.boolean().optional(),
   })

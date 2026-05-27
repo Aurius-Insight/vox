@@ -232,6 +232,7 @@ model Unit {
   id        String   @id @default(cuid())
   name      String
   address   String
+  phone     String?
   capacity  Int      @default(0)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
