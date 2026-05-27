@@ -25,13 +25,20 @@ const VIEW_ROLES = ['diretor', 'coordenacao'] as const;
 // vezes nao tem o CPF na hora do cadastro). Sem CPF, perde-se a dedup
 // por cpfHash — pode entrar aluno duplicado se a equipe nao conferir.
 // Pacote so e obrigatorio para matriculado (experimental nasce sem saldo).
+//
+// Quanto a CPF, aceita string vazia/whitespace como "nao informado" — o
+// front pode mandar `cpf: ""` quando o campo nao foi preenchido.
 const CreateStudentSchema = z
   .object({
     name: z.string().min(2).max(120),
     whatsapp: z.string().min(8).max(30),
     email: z.string().email().max(160).optional(),
     type: z.enum(['matriculado', 'experimental']).default('matriculado'),
-    cpf: z.string().min(11).max(14).optional(),
+    cpf: z
+      .string()
+      .optional()
+      .transform((v) => (v && v.trim().length > 0 ? v : undefined))
+      .pipe(z.string().min(11).max(14).optional()),
     unitId: z.string().min(1),
     packageId: z.string().min(1).optional(),
   })

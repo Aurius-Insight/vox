@@ -40,11 +40,16 @@ const UpdateStageSchema = z.object({
 // Conversao termina em aluno matriculado (vende pacote, lead sai do funil)
 // ou experimental (cria aluno sem pacote, lead vai pra experimental_agendada).
 // CPF e opcional — alguns operadores cadastram antes de ter o documento e
-// completam depois pela edicao. Sem CPF, perde-se dedup por cpfHash.
+// completam depois pela edicao. Sem CPF, perde-se dedup por cpfHash. Aceita
+// string vazia/whitespace como "nao informado" (front pode mandar `cpf: ""`).
 const ConvertLeadSchema = z
   .object({
     type: z.enum(['matriculado', 'experimental']).default('matriculado'),
-    cpf: z.string().min(11).max(14).optional(),
+    cpf: z
+      .string()
+      .optional()
+      .transform((v) => (v && v.trim().length > 0 ? v : undefined))
+      .pipe(z.string().min(11).max(14).optional()),
     unitId: z.string().min(1),
     packageId: z.string().min(1).optional(),
   })

@@ -374,7 +374,8 @@ export function AlunosPage() {
     setSaving(true);
 
     try {
-      // Experimental: nao manda cpf nem packageId (a API trata como opcional).
+      // CPF agora e opcional em qualquer tipo — so manda se foi preenchido.
+      // Experimental: tambem nao precisa de packageId.
       const body: Record<string, string> = {
         name: form.name,
         whatsapp: form.whatsapp,
@@ -382,8 +383,8 @@ export function AlunosPage() {
         unitId: form.unitId,
       };
       if (form.email) body.email = form.email;
-      if (form.type === 'matriculado') {
-        body.cpf = form.cpf;
+      if (form.cpf.trim()) body.cpf = form.cpf.trim();
+      if (form.type === 'matriculado' && form.packageId) {
         body.packageId = form.packageId;
       }
       const response = await api<{
