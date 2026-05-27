@@ -984,16 +984,18 @@ tbody tr:last-child td {
 }
 
 /* Barra de filtros compacta — search + dropdowns + contador em uma linha.
-   Componente reutilizavel em listas com filtros (Alunos por enquanto). */
+   Componente reutilizavel em listas com filtros (Alunos por enquanto).
+   As regras globais `input, select` aplicam width:100% e min-height:44px,
+   entao precisamos resetar aqui pra os filhos viverem no flex sem quebrar. */
 .filter-bar {
   align-items: center;
-  background: var(--surface-1);
-  border: 1px solid var(--border-1, rgba(255, 255, 255, 0.08));
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.45rem 0.6rem;
+  padding: 0.45rem 0.55rem;
 }
 
 .filter-bar-search {
@@ -1001,54 +1003,66 @@ tbody tr:last-child td {
   background: var(--surface-2);
   border: 1px solid transparent;
   border-radius: 8px;
-  color: var(--text-muted);
+  color: var(--text-soft);
   display: flex;
   flex: 1 1 240px;
   gap: 0.45rem;
+  min-height: 36px;
   min-width: 200px;
-  padding: 0.4rem 0.7rem;
+  padding: 0 0.7rem;
   transition: border-color 120ms ease;
+  /* label global aplica grid — flex acima vence pela especificidade. */
 }
 
 .filter-bar-search:focus-within {
-  border-color: var(--primary, #ff7849);
+  border-color: var(--accent);
 }
 
-.filter-bar-search input {
+.filter-bar-search input,
+.filter-bar input[type='search'].filter-bar-input {
   background: transparent;
   border: none;
-  color: var(--text-1);
+  box-shadow: none;
+  color: var(--text);
   flex: 1;
   font-size: 0.88rem;
+  min-height: 0;
   outline: none;
   padding: 0;
+  width: auto;
 }
 
 .filter-bar-search input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-soft);
 }
 
-.filter-bar-select {
+.filter-bar select.filter-bar-select {
   background: var(--surface-2);
   border: 1px solid transparent;
   border-radius: 8px;
-  color: var(--text-1);
+  box-shadow: none;
+  color: var(--text);
   font-size: 0.85rem;
-  height: 2.1rem;
+  height: 36px;
+  min-height: 36px;
+  min-width: 160px;
   padding: 0 0.7rem;
   transition: border-color 120ms ease;
+  width: auto;
 }
 
-.filter-bar-select:focus {
-  border-color: var(--primary, #ff7849);
+.filter-bar select.filter-bar-select:focus {
+  border-color: var(--accent);
   outline: none;
+  box-shadow: none;
 }
 
 .filter-bar-count {
-  color: var(--text-muted);
+  color: var(--text-soft);
   font-size: 0.78rem;
   margin-left: auto;
   padding: 0 0.4rem;
+  white-space: nowrap;
 }
 
 /* Trecho do texto que casou com a busca atual — destaque sutil de marca. */
