@@ -122,7 +122,10 @@ async function main() {
         const tagNames = tagNamesOf(sub, tagsById);
         const existingLeadRow = await prisma.lead.findFirst({
           where: { whatsapp: phone },
-          include: { stage: { select: { slug: true } } },
+          include: {
+            stage: { select: { slug: true } },
+            student: { select: { id: true } },
+          },
         });
         const existingLead = existingLeadRow
           ? {
@@ -132,6 +135,7 @@ async function main() {
               campaign: existingLeadRow.campaign,
               stageSlug: existingLeadRow.stage.slug,
               botconversaContactId: existingLeadRow.botconversaContactId,
+              hasStudent: existingLeadRow.student !== null,
             }
           : null;
 
@@ -157,6 +161,20 @@ async function main() {
           updated += 1;
         } else {
           skipped += 1;
+          // "Student manda": registra no audit pra dar visibilidade
+          // de que o sync respeitou o cadastro do aluno.
+          if (result.reason === 'locked_by_student' && existingLead) {
+            await prisma.auditLog.create({
+              data: {
+                actorType: 'system',
+                entityType: 'lead',
+                entityId: existingLead.id,
+                action: 'stage.locked_by_student',
+                before: { stage: existingLead.stageSlug },
+                after: { reason: 'student_vinculado', source: 'poll-botconversa' },
+              },
+            });
+          }
         }
       }
     }

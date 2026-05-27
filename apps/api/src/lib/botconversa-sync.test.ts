@@ -21,6 +21,7 @@ function existingLead(overrides: Partial<ExistingLead> = {}): ExistingLead {
     campaign: null,
     stageSlug: 'novo_lead',
     botconversaContactId: null,
+    hasStudent: false,
     ...overrides,
   };
 }
@@ -145,6 +146,18 @@ describe('resolveLeadFromSubscriber', () => {
       });
       if (result.action !== 'update') throw new Error('esperava update');
       expect(result.data.stage).toBe('experimental_agendada');
+    });
+
+    it('"Student manda": pula o lead quando ja tem aluno vinculado', () => {
+      const result = resolveLeadFromSubscriber({
+        subscriber: subscriber({ tags: ['CONFIRMADO'] }),
+        tagNames: ['CONFIRMADO'],
+        existingLead: existingLead({ stageSlug: 'novo_lead', hasStudent: true }),
+        source: 'BotConversa',
+      });
+      expect(result.action).toBe('skip');
+      if (result.action !== 'skip') throw new Error('esperava skip');
+      expect(result.reason).toBe('locked_by_student');
     });
 
     it('preenche a unidade apenas quando estava "Nao informado"', () => {

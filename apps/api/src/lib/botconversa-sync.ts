@@ -26,6 +26,12 @@ export type ExistingLead = {
   /** slug atual do stage do lead (lido via JOIN com LeadStage.slug). */
   stageSlug: string;
   botconversaContactId: string | null;
+  /**
+   * `true` quando o Lead ja virou aluno. Nesse caso a sincronizacao
+   * vinda do BotConversa nao mexe em mais nada: stage e cadastro sao
+   * controlados pela ficha do aluno (regra "Student manda").
+   */
+  hasStudent: boolean;
 };
 
 export type LeadCreateData = {
@@ -111,6 +117,14 @@ export function resolveLeadFromSubscriber(input: {
   const contactId = String(subscriber.id);
 
   if (existingLead) {
+    // "Student manda": Lead com aluno vinculado ja tem identidade propria
+    // no app. Mensagens do BotConversa nao reabrem o pipeline nem reescrevem
+    // dados cadastrais — fica a cargo da ficha do aluno. O caller pode
+    // registrar audit a partir do reason 'locked_by_student'.
+    if (existingLead.hasStudent) {
+      return { action: 'skip', reason: 'locked_by_student' };
+    }
+
     return {
       action: 'update',
       leadId: existingLead.id,

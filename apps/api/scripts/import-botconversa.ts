@@ -114,7 +114,10 @@ async function main() {
       if (!DRY_RUN) {
         const existingLeadRow = await prisma.lead.findFirst({
           where: { whatsapp: phone },
-          include: { stage: { select: { slug: true } } },
+          include: {
+            stage: { select: { slug: true } },
+            student: { select: { id: true } },
+          },
         });
         const existingLead = existingLeadRow
           ? {
@@ -124,6 +127,7 @@ async function main() {
               campaign: existingLeadRow.campaign,
               stageSlug: existingLeadRow.stage.slug,
               botconversaContactId: existingLeadRow.botconversaContactId,
+              hasStudent: existingLeadRow.student !== null,
             }
           : null;
         const result = resolveLeadFromSubscriber({
@@ -142,6 +146,18 @@ async function main() {
           const { stage: _slug, ...rest } = result.data;
           await prisma.lead.update({ where: { id: result.leadId }, data: { ...rest, stageId } });
           totalUpdated += 1;
+        } else if (result.reason === 'locked_by_student' && existingLead) {
+          // Lead ja virou aluno; import nao mexe (Student manda) e audita.
+          await prisma.auditLog.create({
+            data: {
+              actorType: 'system',
+              entityType: 'lead',
+              entityId: existingLead.id,
+              action: 'stage.locked_by_student',
+              before: { stage: existingLead.stageSlug },
+              after: { reason: 'student_vinculado', source: 'import-botconversa' },
+            },
+          });
         }
       }
 
