@@ -114,6 +114,11 @@ export function AlunosPage() {
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
+  const [enrollForm, setEnrollForm] = useState<{ packageId: string; cpf: string }>({
+    packageId: '',
+    cpf: '',
+  });
+  const [enrollSaving, setEnrollSaving] = useState(false);
   const [editForm, setEditForm] = useState<EditStudentForm>(EMPTY_EDIT_FORM);
   const [editSaving, setEditSaving] = useState(false);
   const [leadSearch, setLeadSearch] = useState('');
@@ -279,6 +284,40 @@ export function AlunosPage() {
     const currentSince = new Date(history.since);
     const olderSince = new Date(currentSince.getTime() - 90 * 24 * 60 * 60 * 1000);
     void loadHistory(selected.id, olderSince.toISOString());
+  }
+
+  function updateEnrollField(field: keyof typeof enrollForm, value: string) {
+    setEnrollForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleEnroll(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || !enrollForm.packageId) return;
+    setEnrollSaving(true);
+
+    const body: Record<string, string> = { packageId: enrollForm.packageId };
+    if (enrollForm.cpf.trim()) body.cpf = enrollForm.cpf.trim();
+
+    try {
+      const response = await api<{
+        data: { name: string; enrollmentCode: string; packageName: string | null };
+      }>(`/api/students/${selected.id}/enroll`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      toast.success(
+        `${response.data.name} matriculado em ${response.data.packageName ?? 'pacote'}. Matricula ${response.data.enrollmentCode}.`,
+      );
+      setEnrollForm({ packageId: '', cpf: '' });
+      await openStudent(selected.id);
+      await load();
+    } catch (err) {
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel matricular o aluno.',
+      );
+    } finally {
+      setEnrollSaving(false);
+    }
   }
 
   async function handleRenew(event: FormEvent) {
@@ -933,10 +972,41 @@ export function AlunosPage() {
                 <div>
                   <h3>Matricular aluno</h3>
                   <p className="muted-text">
-                    Aluno experimental ainda sem pacote. Para matricular, use{' '}
-                    <strong>"Converter lead"</strong> no topo da pagina — o cadastro pede
-                    CPF, unidade e pacote.
+                    Promove esse aluno experimental para matriculado. O saldo de
+                    aulas vem do pacote escolhido. CPF e opcional — preencha
+                    quando coletar.
                   </p>
+                  <form className="grid-form" onSubmit={handleEnroll}>
+                    <label>
+                      Pacote
+                      <select
+                        value={enrollForm.packageId}
+                        onChange={(event) => updateEnrollField('packageId', event.target.value)}
+                        required
+                      >
+                        <option value="">Selecione</option>
+                        {packages.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} (+{item.classCount} aulas)
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      CPF (opcional)
+                      <input
+                        value={enrollForm.cpf}
+                        onChange={(event) => updateEnrollField('cpf', event.target.value)}
+                        inputMode="numeric"
+                        placeholder="000.000.000-00"
+                      />
+                    </label>
+                    <div className="grid-form-actions">
+                      <button type="submit" disabled={enrollSaving || !enrollForm.packageId}>
+                        {enrollSaving ? 'Matriculando...' : 'Matricular aluno'}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               )}
 

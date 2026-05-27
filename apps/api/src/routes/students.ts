@@ -58,6 +58,20 @@ const RenewSchema = z.object({
   packageId: z.string().min(1),
 });
 
+// Promove um aluno experimental pra matriculado. Ao contrario de RenewSchema
+// (que e pra aluno ja matriculado), aqui o aluno vira matriculado pela
+// primeira vez — packageId obrigatorio define o saldo, CPF e opcional, e o
+// Lead vinculado (se houver) e movido pra etapa 'matriculado' (Student manda).
+const EnrollSchema = z.object({
+  packageId: z.string().min(1),
+  cpf: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim().length > 0 ? v : undefined))
+    .pipe(z.string().min(11).max(14).optional()),
+  unitId: z.string().min(1).optional(),
+});
+
 // Edicao cadastral: campos operacionais. O CPF fica de fora de proposito —
 // e a chave de identidade/dedup do aluno (cpfHash). String vazia no e-mail
 // significa "limpar o campo".
@@ -732,6 +746,155 @@ router.post(
       data: {
         id: result.student.id,
         name: result.student.name,
+        unitName: result.student.unit?.name ?? null,
+        packageName: result.student.packageName,
+        creditBalance: result.student.creditBalance,
+      },
+    });
+  }),
+);
+
+/**
+ * Promove um aluno experimental pra matriculado. Atalho direto da ficha
+ * do aluno: o operador escolhe o pacote (obrigatorio), opcionalmente CPF
+ * e escola, e o aluno e atualizado de uma vez. O Lead vinculado vai
+ * automaticamente pra etapa 'matriculado' (Student manda).
+ */
+router.post(
+  '/:studentId/enroll',
+  requireAuth,
+  requireRole('diretor', 'coordenacao'),
+  asyncHandler(async (req, res) => {
+    const input = EnrollSchema.parse(req.body);
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    let cpfDigits: string | null = null;
+    if (input.cpf) {
+      cpfDigits = normalizeCpf(input.cpf);
+      if (cpfDigits.length !== 11) {
+        throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
+      }
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const student = await tx.student.findFirst({
+        where: { id: req.params.studentId, active: true },
+        include: { lead: { select: { id: true } } },
+      });
+      if (!student) return { ok: false as const, error: 'student_not_found' as const };
+      if (student.type !== 'experimental') {
+        return { ok: false as const, error: 'student_not_experimental' as const };
+      }
+      if (unitScope && student.unitId !== unitScope) {
+        return { ok: false as const, error: 'unit_scope' as const };
+      }
+
+      const pkg = await tx.package.findFirst({ where: { id: input.packageId, active: true } });
+      if (!pkg) return { ok: false as const, error: 'package_not_found' as const };
+
+      // Troca de unidade: a coordenacao so pode mover dentro do proprio
+      // escopo. Sem unitId no payload, mantem a unidade atual.
+      let targetUnitId = student.unitId;
+      if (input.unitId && input.unitId !== student.unitId) {
+        if (unitScope && unitScope !== input.unitId) {
+          return { ok: false as const, error: 'unit_scope_target' as const };
+        }
+        const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
+        if (!unit) return { ok: false as const, error: 'unit_not_found' as const };
+        targetUnitId = input.unitId;
+      }
+
+      // CPF: dedup contra outros alunos ativos (exceto ele mesmo).
+      let cpfHashValue: string | null = student.cpfHash;
+      let cpfMaskedValue: string | null = student.cpfMasked;
+      if (cpfDigits) {
+        cpfHashValue = hashCpf(cpfDigits);
+        const existing = await tx.student.findFirst({
+          where: { cpfHash: cpfHashValue, id: { not: student.id }, active: true },
+        });
+        if (existing) return { ok: false as const, error: 'cpf_already_used' as const };
+        cpfMaskedValue = maskCpf(cpfDigits) ?? null;
+      }
+
+      const updated = await tx.student.update({
+        where: { id: student.id },
+        data: {
+          type: 'matriculado',
+          packageName: pkg.name,
+          creditBalance: { increment: pkg.classCount },
+          unitId: targetUnitId,
+          cpfHash: cpfHashValue,
+          cpfMasked: cpfMaskedValue,
+        },
+        include: { unit: { select: { name: true } } },
+      });
+
+      // Lead vinculado vai pra 'matriculado' (etapa sistemica final).
+      if (student.lead) {
+        const matriculadoStage = await tx.leadStage.findUnique({
+          where: { slug: 'matriculado' },
+        });
+        if (matriculadoStage) {
+          await tx.lead.update({
+            where: { id: student.lead.id },
+            data: { stageId: matriculadoStage.id },
+          });
+        }
+      }
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'student',
+          entityId: student.id,
+          action: 'student.enrolled',
+          before: {
+            type: student.type,
+            packageName: student.packageName,
+            creditBalance: student.creditBalance,
+          },
+          after: {
+            type: updated.type,
+            packageId: pkg.id,
+            packageName: updated.packageName,
+            priceCents: pkg.priceCents,
+            classesAdded: pkg.classCount,
+            creditBalance: updated.creditBalance,
+          },
+        },
+      });
+
+      return { ok: true as const, student: updated };
+    });
+
+    if (!result.ok) {
+      const map: Record<string, { status: number; message: string }> = {
+        student_not_found: { status: 404, message: 'Aluno nao encontrado.' },
+        student_not_experimental: {
+          status: 409,
+          message: 'Aluno ja esta matriculado. Use renovacao em vez de matricula.',
+        },
+        unit_scope: { status: 403, message: 'Aluno fora da sua unidade.' },
+        unit_scope_target: {
+          status: 403,
+          message: 'Voce so pode matricular alunos na sua unidade.',
+        },
+        unit_not_found: { status: 404, message: 'Unidade nao encontrada.' },
+        package_not_found: { status: 404, message: 'Pacote nao encontrado.' },
+        cpf_already_used: { status: 409, message: 'CPF ja cadastrado em outro aluno.' },
+      };
+      const mapped = map[result.error];
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    res.json({
+      data: {
+        id: result.student.id,
+        name: result.student.name,
+        type: result.student.type,
+        enrollmentCode: result.student.enrollmentCode,
+        unitId: result.student.unitId,
         unitName: result.student.unit?.name ?? null,
         packageName: result.student.packageName,
         creditBalance: result.student.creditBalance,
