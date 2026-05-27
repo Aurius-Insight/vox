@@ -47,11 +47,12 @@ enum StudentType {
 }
 
 model Subject {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   teachers      User[]
   classSessions ClassSession[]
@@ -115,6 +116,7 @@ model Student {
   type           StudentType @default(matriculado)
   packageName    String?
   creditBalance  Int         @default(0)
+  tags           String[]    @default([])
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
