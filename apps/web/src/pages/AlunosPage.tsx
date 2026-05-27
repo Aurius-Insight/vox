@@ -721,6 +721,15 @@ export function AlunosPage() {
                 <span className="status-chip">
                   {selected.type === 'experimental' ? 'Experimental' : 'Matriculado'}
                 </span>
+                {selected.tags.length > 0 && (
+                  <div className="tag-chip-row" aria-label="Tags do aluno">
+                    {selected.tags.map((tag) => (
+                      <span key={tag} className="tag-chip">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <p className="muted-text">
                   {selected.type === 'experimental'
                     ? `${selected.unitName ?? 'Sem unidade'} - Aluno experimental (sem pacote)`

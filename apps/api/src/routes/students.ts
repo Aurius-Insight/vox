@@ -95,6 +95,7 @@ router.get(
         unitName: student.unit?.name ?? null,
         packageName: student.packageName,
         creditBalance: student.creditBalance,
+        tags: student.tags,
         status: student.active ? 'ativo' : 'inativo',
       })),
     });
@@ -229,6 +230,7 @@ router.post(
         unitName: result.student.unit?.name ?? null,
         packageName: result.student.packageName,
         creditBalance: result.student.creditBalance,
+        tags: result.student.tags,
       },
     });
   }),
@@ -348,6 +350,7 @@ router.get(
         unitName: student.unit?.name ?? null,
         packageName: student.packageName,
         creditBalance: student.creditBalance,
+        tags: student.tags,
         status: student.active ? 'ativo' : 'inativo',
         origin: student.lead
           ? {
@@ -641,6 +644,7 @@ router.patch(
         unitName: result.student.unit?.name ?? null,
         packageName: result.student.packageName,
         creditBalance: result.student.creditBalance,
+        tags: result.student.tags,
         status: result.student.active ? 'ativo' : 'inativo',
       },
     });

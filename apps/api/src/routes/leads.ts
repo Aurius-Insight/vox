@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
-import type { Lead, LeadStage, Role } from '@prisma/client';
+import type { Lead, LeadStage, Role, StudentType } from '@prisma/client';
 import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler, maskCpf, maskPhone, parsePagination } from '../lib/http.js';
@@ -87,7 +87,12 @@ function canViewSensitiveLeadData(roles: Role[]) {
   return roles.includes('diretor') || roles.includes('coordenacao');
 }
 
-function toLeadDto(lead: Lead & { stage?: LeadStage }, canViewSensitive: boolean) {
+type LeadWithRelations = Lead & {
+  stage?: LeadStage;
+  student?: { type: StudentType } | null;
+};
+
+function toLeadDto(lead: LeadWithRelations, canViewSensitive: boolean) {
   return {
     id: lead.id,
     name: lead.name,
@@ -98,6 +103,10 @@ function toLeadDto(lead: Lead & { stage?: LeadStage }, canViewSensitive: boolean
     // Front recebe slug — interface estavel. Quando o include nao traz o
     // stage, busca via cache (raro nos endpoints atuais, mas seguro).
     stage: lead.stage?.slug ?? '',
+    // Quando o lead ja virou aluno, o tipo do aluno aparece aqui pro front
+    // saber que aquele card e "travado pelo aluno" (Student manda) e mostrar
+    // o modal de confirmacao antes de mover. null = lead puro, sem aluno.
+    studentType: lead.student?.type ?? null,
     createdAt: lead.createdAt.toISOString(),
     updatedAt: lead.updatedAt.toISOString(),
   };
@@ -125,7 +134,7 @@ router.get(
         orderBy: { updatedAt: 'desc' },
         skip: offset,
         take: pageSize,
-        include: { stage: true },
+        include: { stage: true, student: { select: { type: true } } },
       }),
       prisma.lead.count({ where }),
     ]);
@@ -157,7 +166,7 @@ router.post(
         source: input.source,
         stageId: novoLeadStage.id,
       },
-      include: { stage: true },
+      include: { stage: true, student: { select: { type: true } } },
     });
     res.status(201).json({ data: toLeadDto(lead, true) });
   }),
@@ -377,7 +386,7 @@ router.post(
       const updatedLead = await tx.lead.update({
         where: { id: lead.id },
         data: { stageId: nextStage.id },
-        include: { stage: true },
+        include: { stage: true, student: { select: { type: true } } },
       });
 
       await tx.auditLog.create({

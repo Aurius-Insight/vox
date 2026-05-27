@@ -89,6 +89,11 @@ export function LeadsPage() {
   const [convertForm, setConvertForm] = useState<ConvertForm>(EMPTY_CONVERT);
   const [convertSaving, setConvertSaving] = useState(false);
 
+  // Estado do modal "Student manda": ao tentar arrastar um lead que ja virou
+  // aluno matriculado, abrimos um aviso porque a etapa do card e controlada
+  // pelo cadastro, nao mais pelo Kanban. Operador pode insistir, mas sabendo.
+  const [pendingMove, setPendingMove] = useState<{ leadId: string; from: string; to: string }>();
+
   // Config dinamica das etapas (ordem, labels, cor, visibilidade).
   // Vem do servidor; fallback pros defaults estaticos enquanto carrega.
   const [stageConfigs, setStageConfigs] = useState<StageConfig[]>([]);
@@ -222,6 +227,11 @@ export function LeadsPage() {
   /**
    * Drag-and-drop: ao soltar o card numa coluna diferente, faz update
    * otimista (move ja na UI) e dispara o PATCH. Em caso de erro, reverte.
+   *
+   * Quando o lead ja virou aluno matriculado, a regra Student manda diz
+   * que a etapa e controlada pelo cadastro — entao abrimos um modal de
+   * confirmacao antes de chamar a API. Operador pode confirmar (segue
+   * normalmente) ou cancelar (volta o card pra coluna anterior).
    */
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -231,7 +241,15 @@ export function LeadsPage() {
     const lead = leads.find((item) => item.id === leadId);
     if (!lead || lead.stage === newStage) return;
 
-    const previousStage = lead.stage;
+    if (lead.studentType === 'matriculado') {
+      setPendingMove({ leadId, from: lead.stage, to: newStage });
+      return;
+    }
+
+    await applyStageMove(leadId, lead.stage, newStage);
+  }
+
+  async function applyStageMove(leadId: string, previousStage: string, newStage: string) {
     setLeads((current) =>
       current.map((item) => (item.id === leadId ? { ...item, stage: newStage } : item)),
     );
@@ -254,6 +272,17 @@ export function LeadsPage() {
         err instanceof ApiClientError ? err.message : 'Nao foi possivel mover o lead.',
       );
     }
+  }
+
+  async function confirmPendingMove() {
+    if (!pendingMove) return;
+    const { leadId, from, to } = pendingMove;
+    setPendingMove(undefined);
+    await applyStageMove(leadId, from, to);
+  }
+
+  function cancelPendingMove() {
+    setPendingMove(undefined);
   }
 
   function startConvert(lead: Lead) {
@@ -313,6 +342,30 @@ export function LeadsPage() {
           </button>
         </div>
       </header>
+
+      {pendingMove && (
+        <Modal title="Aluno matriculado — mover assim mesmo?" onClose={cancelPendingMove}>
+          <p className="muted-text">
+            Esse lead ja virou aluno matriculado. A etapa do card agora e
+            controlada pelo cadastro do aluno (Student manda), entao a sincronia
+            com o BotConversa nao mexe mais aqui.
+          </p>
+          <p className="muted-text">
+            Mover de <strong>{stageLabel(pendingMove.from)}</strong> para{' '}
+            <strong>{stageLabel(pendingMove.to)}</strong>?
+          </p>
+          <div className="grid-form-actions">
+            <div className="row-actions">
+              <button type="button" onClick={() => void confirmPendingMove()}>
+                Mover assim mesmo
+              </button>
+              <button type="button" className="secondary-button" onClick={cancelPendingMove}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {convertingLead && (
         <div className="modal-overlay" onClick={cancelConvert}>

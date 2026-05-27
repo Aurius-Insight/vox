@@ -112,6 +112,12 @@ export type Lead = {
   source: string;
   /** Slug da etapa atual. Pode ser sistemico (LeadStage) ou custom. */
   stage: string;
+  /**
+   * Tipo do aluno vinculado a esse lead, se existir. Quando o lead ja virou
+   * `matriculado`, mover o card no Kanban abre um modal de confirmacao
+   * porque a etapa "manda" pelo cadastro do aluno (regra Student manda).
+   */
+  studentType: 'experimental' | 'matriculado' | null;
   /** ISO string. Quando o lead entrou no funil — usado pra exibir idade. */
   createdAt?: string;
 };
@@ -129,6 +135,7 @@ export type StudentSummary = {
   unitName: string | null;
   packageName: string | null;
   creditBalance: number;
+  tags: string[];
   status: string;
 };
 

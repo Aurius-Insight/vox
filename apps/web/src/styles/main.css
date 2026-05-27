@@ -640,6 +640,29 @@ tbody tr:last-child td {
   width: max-content;
 }
 
+/* Tags livres do aluno (MENSALISTA, MIX, ATO, ADVOGADO etc.) — vindas
+   do ETL das planilhas ou edicao manual. Visual mais sutil que o status-chip
+   pra nao competir com a hierarquia da ficha. */
+.tag-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.tag-chip {
+  background: transparent;
+  border: 1px solid var(--border-1, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  color: var(--text-muted);
+  display: inline-flex;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.18rem 0.55rem;
+  text-transform: uppercase;
+}
+
 /* Mobile: botao ocupa a largura toda (alvo de toque confortavel). */
 .class-card button {
   grid-column: 1 / -1;
