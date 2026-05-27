@@ -417,6 +417,34 @@ tbody tr:last-child td {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+/* Tabelas dentro dos chart-cards (Rankings + Professores). Padding global
+   (0.9rem 1rem) e font 0.92rem estouram em cards estreitos — apertamos pra
+   caber sem corte. overflow-x: auto como rede de seguranca. */
+.chart-card {
+  overflow: hidden;
+}
+
+.chart-card table {
+  table-layout: auto;
+  width: 100%;
+}
+
+.chart-card th,
+.chart-card td {
+  font-size: 0.82rem;
+  padding: 0.55rem 0.6rem;
+}
+
+.chart-card th {
+  font-size: 0.68rem;
+}
+
+.chart-card td:not(:first-child),
+.chart-card th:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* Tabelas */
 .table-card {
   overflow: hidden;
