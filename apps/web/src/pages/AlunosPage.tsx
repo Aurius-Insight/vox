@@ -1,4 +1,6 @@
+import type React from 'react';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import { ApiClientError, api } from '../api/client';
 import { useAuth } from '../auth/AuthProvider';
 import type {
@@ -47,6 +49,25 @@ const EMPTY_CONVERT_FORM: ConvertForm = {
   unitId: '',
   packageId: '',
 };
+
+// Marca o trecho do nome/matricula que casou com a busca atual. Insensitive,
+// preserva o caso original. Devolve nodes do react pro renderer pintar o
+// <mark> em cima sem disparar XSS.
+function highlightMatch(text: string, query: string): React.ReactNode {
+  const trimmed = query.trim();
+  if (!trimmed) return text;
+  const lower = text.toLowerCase();
+  const needle = trimmed.toLowerCase();
+  const idx = lower.indexOf(needle);
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="search-highlight">{text.slice(idx, idx + needle.length)}</mark>
+      {text.slice(idx + needle.length)}
+    </>
+  );
+}
 
 type EditStudentForm = {
   name: string;
@@ -670,16 +691,19 @@ export function AlunosPage() {
         </Modal>
       )}
 
-      <section className="table-card alunos-filtros">
-        <input
-          type="search"
-          placeholder="Buscar por nome ou matricula"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="alunos-search"
-          aria-label="Buscar aluno"
-        />
+      <div className="filter-bar" role="search">
+        <label className="filter-bar-search">
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="Buscar aluno por nome ou matricula"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Buscar aluno"
+          />
+        </label>
         <select
+          className="filter-bar-select"
           value={unitFilter}
           onChange={(event) => setUnitFilter(event.target.value)}
           aria-label="Filtrar por escola"
@@ -694,6 +718,7 @@ export function AlunosPage() {
             ))}
         </select>
         <select
+          className="filter-bar-select"
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}
           aria-label="Filtrar por tipo"
@@ -702,10 +727,12 @@ export function AlunosPage() {
           <option value="matriculado">Matriculado</option>
           <option value="experimental">Experimental</option>
         </select>
-        <span className="muted-text alunos-count">
-          {visibleStudents.length} de {students.length}
+        <span className="filter-bar-count">
+          {visibleStudents.length === students.length
+            ? `${students.length} alunos`
+            : `${visibleStudents.length} de ${students.length}`}
         </span>
-      </section>
+      </div>
 
       <div className={selected ? 'split-grid' : 'split-grid split-grid-collapsed'}>
         <section className="table-card">
@@ -717,13 +744,12 @@ export function AlunosPage() {
                 <th>Matricula</th>
                 <th>Escola</th>
                 <th>Saldo</th>
-                <th>Acesso</th>
               </tr>
             </thead>
             <tbody>
               {visibleStudents.length === 0 && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={5}>
                     {students.length === 0
                       ? 'Nenhum aluno cadastrado.'
                       : 'Nenhum aluno encontrado com esses filtros.'}
@@ -736,33 +762,15 @@ export function AlunosPage() {
                   className={selected?.id === student.id ? 'row-selected' : undefined}
                   onClick={() => void openStudent(student.id)}
                 >
-                  <td>{student.name}</td>
+                  <td>{highlightMatch(student.name, search)}</td>
                   <td>
                     <span className="status-chip">
                       {student.type === 'experimental' ? 'Experimental' : 'Matriculado'}
                     </span>
                   </td>
-                  <td>{student.enrollmentCode}</td>
+                  <td>{highlightMatch(student.enrollmentCode, search)}</td>
                   <td>{student.unitName ?? '-'}</td>
                   <td>{student.creditBalance}</td>
-                  <td>
-                    {/* stopPropagation: o clique gera o link sem abrir o detalhe. */}
-                    {student.type === 'matriculado' ? (
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        disabled={linkPendingId === student.id}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleGenerateLink(student.id);
-                        }}
-                      >
-                        {linkPendingId === student.id ? 'Gerando...' : 'Gerar link'}
-                      </button>
-                    ) : (
-                      <span className="muted-text">—</span>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -805,6 +813,20 @@ export function AlunosPage() {
                   <p className="muted-text">
                     Origem: {selected.origin.campaign ?? selected.origin.source}
                   </p>
+                )}
+                {/* Magic link de acesso ao portal — so faz sentido pra
+                    aluno matriculado (experimental nao tem portal). */}
+                {selected.type === 'matriculado' && (
+                  <div className="row-actions detail-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={linkPendingId === selected.id}
+                      onClick={() => void handleGenerateLink(selected.id)}
+                    >
+                      {linkPendingId === selected.id ? 'Gerando...' : 'Gerar link de acesso'}
+                    </button>
+                  </div>
                 )}
               </div>
 
