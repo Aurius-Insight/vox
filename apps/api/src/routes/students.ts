@@ -31,7 +31,9 @@ const VIEW_ROLES = ['diretor', 'coordenacao'] as const;
 const CreateStudentSchema = z
   .object({
     name: z.string().min(2).max(120),
-    whatsapp: z.string().min(8).max(30),
+    // WhatsApp opcional: ETL das planilhas legadas cria alunos sem fone;
+    // operador completa depois. Quando vier, exige 8-30 chars.
+    whatsapp: z.string().min(8).max(30).optional(),
     email: z.string().email().max(160).optional(),
     type: z.enum(['matriculado', 'experimental']).default('matriculado'),
     cpf: z
@@ -126,7 +128,7 @@ router.post(
       throw new ApiError(403, 'unit_scope', 'Voce so pode cadastrar alunos na sua unidade.');
     }
 
-    const whatsappDigits = input.whatsapp.replace(/\D/g, '');
+    const whatsappDigits = input.whatsapp ? input.whatsapp.replace(/\D/g, '') : null;
 
     const result = await withEnrollmentCodeRetry(() => prisma.$transaction(async (tx) => {
       const unit = await tx.unit.findFirst({ where: { id: input.unitId, active: true } });
@@ -154,17 +156,21 @@ router.post(
 
       // Dedup por whatsapp: sem CPF, e o unico campo que evita duplicata.
       // Bloqueia se ja existe aluno ativo com o mesmo numero — operador
-      // deve usar o cadastro existente ou desativar antes.
-      const existingByWhatsapp = await tx.student.findFirst({
-        where: { whatsapp: whatsappDigits, active: true },
-        select: { id: true, enrollmentCode: true },
-      });
-      if (existingByWhatsapp) {
-        return {
-          ok: false as const,
-          error: 'whatsapp_already_used' as const,
-          existing: existingByWhatsapp,
-        };
+      // deve usar o cadastro existente ou desativar antes. So roda quando
+      // o whatsapp foi informado; cadastro sem fone (ETL legado, etc.)
+      // depende do operador conferir manualmente eventuais duplicidades.
+      if (whatsappDigits) {
+        const existingByWhatsapp = await tx.student.findFirst({
+          where: { whatsapp: whatsappDigits, active: true },
+          select: { id: true, enrollmentCode: true },
+        });
+        if (existingByWhatsapp) {
+          return {
+            ok: false as const,
+            error: 'whatsapp_already_used' as const,
+            existing: existingByWhatsapp,
+          };
+        }
       }
 
       const enrollmentCode = await uniqueEnrollmentCode((code) =>

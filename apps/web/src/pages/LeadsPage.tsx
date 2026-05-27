@@ -679,7 +679,10 @@ function LeadCard({
     : undefined;
 
   // Telefone vira link wa.me — abre a conversa do lead direto no WhatsApp.
-  const waLink = whatsappLink(lead.whatsapp);
+  // Lead absorvido das planilhas legadas pode nao ter fone; o card mostra
+  // placeholder e o operador completa pela ficha.
+  const waLink = lead.whatsapp ? whatsappLink(lead.whatsapp) : null;
+  const whatsappDisplay = lead.whatsapp ?? 'sem WhatsApp';
 
   return (
     <article
@@ -700,10 +703,10 @@ function LeadCard({
           // Impede que o clique no link inicie o drag do card.
           onPointerDown={(event) => event.stopPropagation()}
         >
-          {lead.whatsapp}
+          {whatsappDisplay}
         </a>
       ) : (
-        <p className="kanban-card-meta">{lead.whatsapp}</p>
+        <p className="kanban-card-meta">{whatsappDisplay}</p>
       )}
       <p className="kanban-card-meta">
         {lead.unitInterest} · {lead.campaign ?? lead.source}

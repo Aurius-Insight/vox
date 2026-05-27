@@ -553,7 +553,7 @@ export function AlunosPage() {
                   className="secondary-button"
                   onClick={() => selectLead(lead)}
                 >
-                  {lead.name} - {lead.whatsapp} - {lead.unitInterest}
+                  {lead.name} - {lead.whatsapp ?? 'sem WhatsApp'} - {lead.unitInterest}
                   {lead.campaign ? ` - ${lead.campaign}` : ''}
                 </button>
               ))}
@@ -563,7 +563,7 @@ export function AlunosPage() {
           {convertLead && (
             <div className="stack">
               <p className="muted-text">
-                Convertendo <strong>{convertLead.name}</strong> ({convertLead.whatsapp}).
+                Convertendo <strong>{convertLead.name}</strong> ({convertLead.whatsapp ?? 'sem WhatsApp'}).
               </p>
               <form className="grid-form" onSubmit={handleConvertLead}>
                 <label>
@@ -736,7 +736,7 @@ export function AlunosPage() {
                     : `${selected.unitName ?? 'Sem unidade'} - ${selected.packageName} - ${selected.creditBalance} aulas restantes`}
                 </p>
                 <p className="muted-text">
-                  WhatsApp {selected.whatsapp}
+                  WhatsApp {selected.whatsapp ?? 'nao cadastrado'}
                   {selected.cpf ? ` - CPF ${selected.cpf}` : ''}
                   {selected.email ? ` - ${selected.email}` : ''}
                 </p>
@@ -807,7 +807,11 @@ export function AlunosPage() {
                       <input
                         value={editForm.whatsapp}
                         onChange={(event) => updateEditField('whatsapp', event.target.value)}
-                        placeholder={`Atual: ${selected.whatsapp} - preencha so para trocar`}
+                        placeholder={
+                          selected.whatsapp
+                            ? `Atual: ${selected.whatsapp} - preencha so para trocar`
+                            : 'Sem WhatsApp - preencha para cadastrar'
+                        }
                       />
                     </label>
                     <label>

@@ -75,6 +75,12 @@ router.post(
 
     const { link } = await createMagicLink(student.id);
 
+    // Sem whatsapp, nao da pra enviar magic link. Devolve a mesma resposta
+    // generica (sent:true) pra nao vazar quem ta cadastrado ou nao.
+    if (!student.whatsapp) {
+      return res.json({ sent: true });
+    }
+
     // Tenta entregar via BotConversa. Falha de envio nao deve revelar nada
     // ao caller (poderia enumerar alunos), mas precisa ficar nos logs.
     try {

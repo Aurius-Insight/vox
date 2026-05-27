@@ -27,7 +27,9 @@ const ListQuerySchema = z.object({
 
 const CreateLeadSchema = z.object({
   name: z.string().min(2).max(120),
-  whatsapp: z.string().min(8).max(30),
+  // Opcional: cadastros de alunos vindos da planilha podem nascer sem
+  // fone. Quando vier, exige 8-30 chars.
+  whatsapp: z.string().min(8).max(30).optional(),
   unitInterest: z.string().min(2).max(80),
   // Trim + colapsa whitespace pra evitar duplicatas no dashboard agrupado.
   campaign: z
@@ -160,7 +162,7 @@ router.post(
     const lead = await prisma.lead.create({
       data: {
         name: input.name,
-        whatsapp: input.whatsapp.replace(/\D/g, ''),
+        whatsapp: input.whatsapp ? input.whatsapp.replace(/\D/g, '') : null,
         unitInterest: input.unitInterest,
         campaign: input.campaign,
         source: input.source,
@@ -327,9 +329,9 @@ router.post(
       }
 
       // Dedup por whatsapp: so se vamos CRIAR student novo (lead nao tem
-      // student vinculado). Se ja existe outro student ativo com o mesmo
-      // whatsapp, bloqueia — provavel duplicata.
-      if (!lead.student) {
+      // student vinculado) E o lead tem whatsapp informado. Lead sem fone
+      // (planilha legada) nao bloqueia — operador valida na ficha.
+      if (!lead.student && lead.whatsapp) {
         const existingByWhatsapp = await tx.student.findFirst({
           where: { whatsapp: lead.whatsapp, active: true },
           select: { id: true, enrollmentCode: true },

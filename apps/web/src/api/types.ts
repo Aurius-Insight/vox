@@ -106,7 +106,7 @@ export type StageConfig = {
 export type Lead = {
   id: string;
   name: string;
-  whatsapp: string;
+  whatsapp: string | null;
   unitInterest: string;
   campaign?: string;
   source: string;
@@ -129,7 +129,7 @@ export type StudentSummary = {
   name: string;
   type: StudentType;
   enrollmentCode: string;
-  whatsapp: string;
+  whatsapp: string | null;
   cpf?: string;
   unitId: string | null;
   unitName: string | null;

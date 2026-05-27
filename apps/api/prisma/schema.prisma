@@ -82,7 +82,7 @@ model User {
 model Lead {
   id                    String    @id @default(cuid())
   name                  String
-  whatsapp              String
+  whatsapp              String?
   email                 String?
   unitInterest          String
   campaign              String?
@@ -108,7 +108,7 @@ model Student {
   leadId         String?  @unique
   unitId         String?
   name           String
-  whatsapp       String
+  whatsapp       String?
   email          String?
   cpfHash        String?
   cpfMasked      String?
