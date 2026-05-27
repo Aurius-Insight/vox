@@ -13,9 +13,13 @@ import { ApiError, asyncHandler } from '../lib/http.js';
 
 const router = Router();
 
+// Senha minima de 8 caracteres na validacao de FORMATO do login. Nao
+// rejeita senhas legadas (validacao acontece em runtime contra bcrypt
+// hash); aumenta a barreira contra ataques que mandam payload absurdo.
+// Politica de criacao de usuario continua exigindo min(12).
 const LoginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
+  password: z.string().min(8),
 });
 
 router.post(

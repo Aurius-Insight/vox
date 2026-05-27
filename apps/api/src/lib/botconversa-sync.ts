@@ -101,7 +101,11 @@ export function resolveLeadFromSubscriber(input: {
     return { action: 'skip', reason: 'telefone ausente ou invalido' };
   }
 
-  const campaignName = subscriber.campaigns?.[0]?.name ?? null;
+  // Trim + colapsa whitespace pra alinhar com a normalizacao das outras
+  // entradas (POST /api/leads, webhook). Evita C24 CATETE vs  C24 CATETE
+  // viram duplicatas no dashboard agrupado.
+  const campaignRaw = subscriber.campaigns?.[0]?.name?.trim().replace(/\s+/g, ' ');
+  const campaignName = campaignRaw && campaignRaw.length > 0 ? campaignRaw : null;
   const stage = deriveStage(tagNames);
   const unit = deriveUnit(tagNames, campaignName);
   const contactId = String(subscriber.id);

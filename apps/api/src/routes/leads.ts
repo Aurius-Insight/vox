@@ -29,7 +29,13 @@ const CreateLeadSchema = z.object({
   name: z.string().min(2).max(120),
   whatsapp: z.string().min(8).max(30),
   unitInterest: z.string().min(2).max(80),
-  campaign: z.string().max(120).optional(),
+  // Trim + colapsa whitespace pra evitar duplicatas no dashboard agrupado.
+  campaign: z
+    .string()
+    .max(120)
+    .transform((v) => v.trim().replace(/\s+/g, ' '))
+    .refine((v) => v.length > 0, { message: 'Campanha vazia.' })
+    .optional(),
   source: z.string().min(2).max(80),
 });
 
@@ -174,7 +180,10 @@ router.patch(
         const updated = await tx.lead.update({
           where: { id: req.params.leadId },
           data: { stageId: targetStage.id },
-          include: { student: { select: { id: true } }, stage: true },
+          include: {
+            student: { select: { id: true, type: true, cpfHash: true } },
+            stage: true,
+          },
         });
 
         // Ao agendar a aula experimental, o lead vira um aluno experimental
@@ -199,6 +208,33 @@ router.patch(
               enrollmentCode,
               type: 'experimental',
               creditBalance: 0,
+            },
+          });
+        }
+
+        // Recolhimento do experimental orfao: se o lead esta voltando atras
+        // (deixou `experimental_agendada` e nao foi pra `matriculado`), e o
+        // student vinculado e experimental SEM CPF (sinal de que foi criado
+        // automaticamente pelo proprio fluxo), deletamos. Mantemos se ja
+        // teve operacao real em cima (CPF preenchido = operador trabalhou).
+        const movedAwayFromExperimental =
+          input.stage !== 'experimental_agendada' && input.stage !== 'matriculado';
+        if (
+          movedAwayFromExperimental &&
+          updated.student &&
+          updated.student.type === 'experimental' &&
+          !updated.student.cpfHash
+        ) {
+          await tx.student.delete({ where: { id: updated.student.id } });
+          await tx.auditLog.create({
+            data: {
+              actorUserId: req.user!.id,
+              actorType: 'user',
+              entityType: 'student',
+              entityId: updated.student.id,
+              action: 'student.experimental_recalled',
+              before: { leadId: updated.id, fromStage: 'experimental_agendada' },
+              after: { toStage: input.stage, reason: 'lead_moved_back' },
             },
           });
         }

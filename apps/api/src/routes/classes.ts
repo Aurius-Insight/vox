@@ -534,12 +534,36 @@ router.delete(
 
       const now = new Date();
 
-      // Cancela em cascata todos os agendamentos ativos. Nao mexe em saldo
-      // porque o credito so e consumido na presenca confirmada.
+      // Cancela em cascata todos os agendamentos ativos.
       await tx.classBooking.updateMany({
         where: { classSessionId: classSession.id, status: 'agendado' },
         data: { status: 'cancelado', canceledAt: now },
       });
+
+      // Estorno: presencas marcadas como 'presente' com creditConsumed=true
+      // devem devolver 1 credito pro saldo do aluno. Sem isso, aluno paga
+      // por aula que nao aconteceu. Marca a presenca como nao-mais-consumida
+      // pra evitar estorno duplo se algum retry acontecer.
+      const attendancesToRefund = await tx.attendance.findMany({
+        where: {
+          classSessionId: classSession.id,
+          status: 'presente',
+          creditConsumed: true,
+        },
+        select: { id: true, studentId: true },
+      });
+      let refundedCount = 0;
+      for (const att of attendancesToRefund) {
+        await tx.student.update({
+          where: { id: att.studentId },
+          data: { creditBalance: { increment: 1 } },
+        });
+        await tx.attendance.update({
+          where: { id: att.id },
+          data: { creditConsumed: false },
+        });
+        refundedCount += 1;
+      }
 
       const updated = await tx.classSession.update({
         where: { id: classSession.id },
@@ -554,11 +578,11 @@ router.delete(
           entityId: updated.id,
           action: 'class.canceled',
           before: classSession,
-          after: updated,
+          after: { ...updated, refundedCount },
         },
       });
 
-      return { ok: true as const, classSession: updated };
+      return { ok: true as const, classSession: updated, refundedCount };
     });
 
     if (!result.ok) {
@@ -571,7 +595,13 @@ router.delete(
       throw new ApiError(409, 'class_canceled', 'Aula ja estava cancelada.');
     }
 
-    res.json({ data: { id: result.classSession.id, canceledAt: result.classSession.canceledAt } });
+    res.json({
+      data: {
+        id: result.classSession.id,
+        canceledAt: result.classSession.canceledAt,
+        refundedCount: result.refundedCount,
+      },
+    });
   }),
 );
 

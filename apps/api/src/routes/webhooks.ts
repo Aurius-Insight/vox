@@ -20,7 +20,12 @@ const BotConversaPayloadSchema = z.object({
   fields: z
     .object({
       unitInterest: z.string().max(80).optional(),
-      campaign: z.string().max(120).optional(),
+      campaign: z
+        .string()
+        .max(120)
+        .transform((v) => v.trim().replace(/\s+/g, ' '))
+        .refine((v) => v.length > 0, { message: 'Campanha vazia.' })
+        .optional(),
     })
     .optional(),
 });

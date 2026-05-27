@@ -18,6 +18,11 @@ const EnvSchema = z.object({
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   SESSION_SECRET: z.string().min(32),
   WEBHOOK_SECRET: z.string().min(24),
+  // Salt dedicado pra hash de CPF. Opcional: se ausente, cai pro
+  // SESSION_SECRET (comportamento legado — preserva hashes ja salvos).
+  // Em prod novo, definir um valor independente: se SESSION_SECRET vazar,
+  // os hashes de CPF ficam protegidos por outra chave.
+  CPF_HASH_SALT: z.string().min(32).optional(),
   ADMIN_EMAIL: z.string().email().default('admin@voxrj.com'),
   ADMIN_PASSWORD: z.string().min(12),
   // Opcional: sem a chave, o envio do magic link via BotConversa fica como
