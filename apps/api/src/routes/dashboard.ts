@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/http.js';
+import { computeToday } from './dashboard/today.js';
+import { computeRankings } from './dashboard/rankings.js';
+import { computeTeachers } from './dashboard/teachers.js';
+import { computeTrends } from './dashboard/trends.js';
+import { computeRenewals } from './dashboard/renewals.js';
+import { computeEtlPending } from './dashboard/etl-pending.js';
 
 const router = Router();
 
@@ -24,8 +30,7 @@ router.get(
 
     // Filtro por unidade. Dados operacionais (aulas, alunos, presenca) usam o
     // unitId. Leads nao tem FK para Unit — so o campo de texto livre
-    // `unitInterest` — entao filtram por match exato do nome (leadWhere abaixo),
-    // igual a aba por unidade da pagina de Vendas.
+    // `unitInterest` — entao filtram por match exato do nome (leadWhere abaixo).
     const classWhere = unitId ? { unitId } : {};
     const studentWhere = unitId
       ? { active: true, type: 'matriculado' as const, unitId }
@@ -43,7 +48,6 @@ router.get(
       select: { id: true, name: true },
     });
 
-    // Leads filtram pelo nome da unidade (texto livre em `unitInterest`).
     const selectedUnit = unitId
       ? availableUnits.find((unit) => unit.id === unitId)
       : undefined;
@@ -63,10 +67,15 @@ router.get(
       activeStudentRows,
       presentCount,
       noShowCount,
+      // Fases A-E ficam em modulos separados pra esse arquivo nao explodir.
+      today,
+      rankings,
+      teachers,
+      trends,
+      renewals,
+      etlPending,
     ] = await Promise.all([
       prisma.lead.count({ where: leadWhere }),
-      // "Conversao" agora e qualquer etapa marcada como kind='won' — assim
-      // se um dia criar `matriculado_promo` ou similar, ela e absorvida.
       prisma.lead.count({ where: { stage: { kind: 'won' }, ...leadWhere } }),
       prisma.lead.groupBy({ by: ['stageId'], where: leadWhere, _count: true }),
       prisma.lead.groupBy({
@@ -91,12 +100,16 @@ router.get(
       }),
       prisma.attendance.count({ where: { status: 'presente', ...classRelationFilter } }),
       prisma.attendance.count({ where: { status: 'no_show', ...classRelationFilter } }),
+      computeToday({ unitId }),
+      computeRankings({ unitId }),
+      computeTeachers({ unitId }),
+      computeTrends({ unitId, leadWhere }),
+      computeRenewals({ unitId }),
+      computeEtlPending(),
     ]);
 
     const totalCapacity = classAggregates._sum.capacity ?? 0;
 
-    // Resolve stageId -> slug pra preservar o contrato { stage: slug }
-    // que o front ja consome no card "Leads por etapa".
     const stages = await prisma.leadStage.findMany({
       where: { id: { in: byStageRaw.map((r) => r.stageId) } },
       select: { id: true, slug: true },
@@ -134,6 +147,12 @@ router.get(
         attendance: {
           rate: percentage(presentCount, presentCount + noShowCount),
         },
+        today,
+        rankings,
+        teachers,
+        trends,
+        renewals,
+        etlPending,
       },
     });
   }),

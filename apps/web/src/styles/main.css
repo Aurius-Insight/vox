@@ -379,6 +379,44 @@ tbody tr:last-child td {
   line-height: 1;
 }
 
+.metric-card small {
+  font-size: 0.74rem;
+}
+
+.metric-card[data-tone='alert'] strong {
+  color: #ef4444;
+}
+
+.metric-card[data-tone='warn'] strong {
+  color: #f59e0b;
+}
+
+/* Estrutura por secao no dashboard: titulo + grade de cards. */
+.dashboard-section {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.dashboard-section-title {
+  color: var(--text);
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.dashboard-section-footnote {
+  margin: 0;
+}
+
+/* Grade dos 3 trend-cards (leads/vendas/presencas) e dos 3 rankings. */
+.trend-grid,
+.ranking-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 /* Tabelas */
 .table-card {
   overflow: hidden;

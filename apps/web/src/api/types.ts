@@ -304,4 +304,56 @@ export type DashboardData = {
   attendance: {
     rate: number;
   };
+  today: {
+    sessionsCount: number;
+    expectedStudents: number;
+    teachersScheduled: number;
+    confirmationsPending: number;
+  };
+  rankings: {
+    byUnit: Array<{
+      unitId: string;
+      unitName: string;
+      students: number;
+      classesThisMonth: number;
+      attendanceRate: number;
+    }>;
+    bySubject: Array<{
+      subjectId: string;
+      subjectName: string;
+      students: number;
+      attendances: number;
+    }>;
+    byPackage: Array<{
+      name: string;
+      studentCount: number;
+      priceCents: number;
+      revenueProjectionCents: number;
+    }>;
+  };
+  teachers: {
+    activeCount: number;
+    top: Array<{
+      id: string;
+      name: string;
+      subject: string | null;
+      classesGiven: number;
+      uniqueStudents: number;
+      attendanceRate: number;
+    }>;
+  };
+  trends: {
+    series: Array<{ date: string; leads: number; sales: number; attendance: number }>;
+    velocity: { sampleSize: number; avgDaysLeadToEnrolled: number };
+  };
+  renewals: {
+    thisMonth: number;
+    lastMonth: number;
+    avgTicketCents: number;
+  };
+  etlPending: {
+    studentsWithoutWhatsapp: number;
+    studentsFromEtl: number;
+    datesAmbiguous: number;
+  };
 };
