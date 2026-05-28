@@ -157,9 +157,14 @@ export function buildStudentTimeline(input: {
   }
 
   for (const attendance of input.attendances) {
+    // A linha do tempo do aluno e cronologica do PONTO DE VISTA dele —
+    // o evento e a aula que ele fez (classStartsAt), nao o instante em
+    // que o professor clicou pra marcar (markedAt). markedAt pode estar
+    // distante do startsAt em ETLs / backfills (toda a importacao das
+    // planilhas legadas marcou no mesmo segundo).
     events.push({
       type: 'attendance',
-      at: attendance.markedAt.toISOString(),
+      at: attendance.classStartsAt.toISOString(),
       data: {
         attendanceId: attendance.id,
         status: attendance.status,
