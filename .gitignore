@@ -8,3 +8,5 @@ coverage
 *.tsbuildinfo
 backups/
 apps/api/scripts/output/
+# Onboarding doc contem chave SSH real — nao versionar.
+docs/ONBOARDING.md
