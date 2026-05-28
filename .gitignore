@@ -8,5 +8,6 @@ coverage
 *.tsbuildinfo
 backups/
 apps/api/scripts/output/
-# Onboarding doc contem chave SSH real — nao versionar.
-docs/ONBOARDING.md
+# Pasta de docs nao e versionada (decisao do owner). Arquivos ficam
+# como rascunho local; o que precisar ser publico vai em outro lugar.
+docs/
