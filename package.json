@@ -17,6 +17,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:dev": "prisma migrate dev",
     "db:seed": "tsx apps/api/prisma/seed.ts",
-    "db:import-botconversa": "tsx apps/api/scripts/import-botconversa.ts"
+    "db:import-botconversa": "tsx apps/api/scripts/import-botconversa.ts",
+    "db:poll-botconversa": "tsx apps/api/scripts/poll-botconversa.ts"
   }
 }

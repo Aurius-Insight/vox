@@ -8,6 +8,7 @@ import { ToastProvider } from './components/ToastProvider';
 import { firstAccessibleRoute } from './lib/navigation';
 import { AgendaPage } from './pages/AgendaPage';
 import { AlunosPage } from './pages/AlunosPage';
+import { AtendimentoPage } from './pages/AtendimentoPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { LeadsPage } from './pages/LeadsPage';
 import { LoginPage } from './pages/LoginPage';
@@ -69,6 +70,10 @@ export default function App() {
 
               <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
                 <Route path="/vendas" element={<LeadsPage />} />
+              </Route>
+
+              <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
+                <Route path="/atendimento" element={<AtendimentoPage />} />
               </Route>
 
               <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>

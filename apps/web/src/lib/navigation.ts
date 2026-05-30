@@ -10,6 +10,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Dashboard', roles: ['diretor'] },
   { to: '/vendas', label: 'Vendas', roles: ['diretor', 'coordenacao'] },
+  { to: '/atendimento', label: 'Atendimento', roles: ['diretor', 'coordenacao'] },
   { to: '/coordenacao', label: 'Agenda', roles: ['diretor', 'coordenacao'] },
   {
     to: '/coordenacao/presenca',

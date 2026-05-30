@@ -1,5 +1,9 @@
 import { deriveStage, deriveUnit } from './botconversa-mapping.js';
 import type { SystemicStageSlug } from './lead-stage-cache.js';
+import { MIN_PHONE_DIGITS, normalizePhone } from './phone.js';
+
+// Reexporta para preservar os imports historicos (`./botconversa-sync`).
+export { MIN_PHONE_DIGITS, normalizePhone };
 
 // Logica pura de sincronizacao de um contato do BotConversa para um Lead.
 // Compartilhada pelo import (lote) e pelo poll (incremental) — manter a regra
@@ -58,14 +62,6 @@ export type LeadSyncResult =
   | { action: 'skip'; reason: string }
   | { action: 'create'; data: LeadCreateData }
   | { action: 'update'; leadId: string; data: LeadUpdateData };
-
-/** Telefone reduzido a digitos. Strings nulas/indefinidas viram ''. */
-export function normalizePhone(raw: string | null | undefined): string {
-  return (raw ?? '').replace(/\D/g, '');
-}
-
-/** Minimo de digitos para tratar um contato como lead (DDD + numero). */
-export const MIN_PHONE_DIGITS = 8;
 
 const UNIT_NOT_SET = 'Nao informado';
 

@@ -46,6 +46,25 @@ enum StudentType {
   matriculado
 }
 
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageStatus {
+  queued
+  sent
+  delivered
+  read
+  failed
+  received
+}
+
+enum ConversationStatus {
+  open
+  closed
+}
+
 model Subject {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -96,6 +115,7 @@ model Lead {
   stage                 LeadStage      @relation(fields: [stageId], references: [id])
   bookings              ClassBooking[]
   student               Student?
+  conversations         Conversation[]
 
   @@index([whatsapp])
   @@index([stageId])
@@ -125,6 +145,7 @@ model Student {
   unit           Unit?          @relation(fields: [unitId], references: [id])
   bookings       ClassBooking[]
   attendances    Attendance[]
+  conversations  Conversation[]
 
   @@index([whatsapp])
   @@index([cpfHash])
@@ -213,6 +234,64 @@ model IntegrationEvent {
   externalEventId String   @unique
   payload         Json
   processedAt     DateTime @default(now())
+}
+
+// Conversa de WhatsApp (1 por telefone). Liga o atendimento ao Lead/Student
+// quando o numero casa; ver docs/PLANO_CHAT_COEX.md.
+model Conversation {
+  id             String             @id @default(cuid())
+  phone          String             @unique // digitos normalizados (chave de match)
+  waContactId    String? // wa_id devolvido pela Meta
+  name           String? // profile name do WhatsApp
+  leadId         String?
+  studentId      String?
+  unitId         String? // best-effort; reservado p/ escopo por unidade futuro
+  assignedUserId String? // reservado p/ atribuicao futura (hoje: caixa compartilhada)
+  status         ConversationStatus @default(open)
+  lastInboundAt  DateTime? // ultima msg recebida — controla a janela de 24h
+  lastMessageAt  DateTime?
+  unreadCount    Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  lead     Lead?     @relation(fields: [leadId], references: [id])
+  student  Student?  @relation(fields: [studentId], references: [id])
+  messages Message[]
+
+  @@index([lastMessageAt])
+  @@index([leadId])
+  @@index([studentId])
+}
+
+// Conta de WhatsApp conectada via Embedded Signup (CoEx). Quando existe, o
+// cliente (`lib/whatsapp.ts`) usa estas credenciais no lugar das envs de teste.
+model WhatsAppAccount {
+  id                String   @id @default(cuid())
+  wabaId            String   @unique
+  phoneNumberId     String
+  displayPhone      String?
+  accessToken       String
+  connectedByUserId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  conversationId String
+  waMessageId    String?          @unique // wamid — idempotencia/dedup e update de status
+  direction      MessageDirection
+  type           String           @default("text") // text | template | image | ...
+  body           String?
+  templateName   String?
+  status         MessageStatus    @default(received)
+  sentByUserId   String? // quem enviou pela UI do VOX (null = app/echo)
+  errorReason    String?
+  createdAt      DateTime         @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
 }
 
 model AuditLog {
