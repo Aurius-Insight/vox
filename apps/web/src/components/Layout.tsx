@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   GraduationCap,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   PanelLeft,
   Presentation,
@@ -28,6 +29,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   '/professores': Presentation,
   '/unidades': Building2,
   '/configuracoes': Settings,
+  '/ajuda': LifeBuoy,
 };
 
 function readCollapsed(): boolean {

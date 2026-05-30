@@ -20,6 +20,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/professores', label: 'Professores', roles: ['diretor', 'coordenacao'] },
   { to: '/unidades', label: 'Escolas', roles: ['diretor', 'coordenacao'] },
   { to: '/configuracoes', label: 'Configuracoes', roles: ['diretor'] },
+  { to: '/ajuda', label: 'Ajuda', roles: ['diretor', 'coordenacao', 'professor'] },
 ];
 
 /** Itens do menu que o usuario pode acessar, dado o conjunto de papeis. */

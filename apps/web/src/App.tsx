@@ -7,6 +7,7 @@ import { Layout } from './components/Layout';
 import { ToastProvider } from './components/ToastProvider';
 import { firstAccessibleRoute } from './lib/navigation';
 import { AgendaPage } from './pages/AgendaPage';
+import { AjudaPage } from './pages/AjudaPage';
 import { AlunosPage } from './pages/AlunosPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { LeadsPage } from './pages/LeadsPage';
@@ -96,6 +97,8 @@ export default function App() {
               <Route element={<RequireAuth roles={['diretor']} />}>
                 <Route path="/configuracoes" element={<ConfiguracoesPage />} />
               </Route>
+
+              <Route path="/ajuda" element={<AjudaPage />} />
             </Route>
           </Route>
         </Routes>
