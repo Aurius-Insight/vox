@@ -2583,3 +2583,28 @@ tr.row-selected {
   border-color: color-mix(in srgb, var(--success) 30%, transparent);
   background: color-mix(in srgb, var(--success) 12%, transparent);
 }
+
+/* Botão "Templates" no compositor do chat */
+.chat-tpl-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 42px;
+  min-height: 0;
+  padding: 0 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: none;
+}
+.chat-tpl-toggle:hover,
+.chat-tpl-toggle:active {
+  background: var(--surface-2);
+  transform: none;
+  box-shadow: none;
+}

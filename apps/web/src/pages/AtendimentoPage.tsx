@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { MessageCircle, Search, Send } from 'lucide-react';
+import { LayoutTemplate, MessageCircle, Search, Send } from 'lucide-react';
 import { useToast } from '../components/ToastProvider';
 import { useAuth } from '../auth/AuthProvider';
 import { WhatsAppConnect } from '../components/chat/WhatsAppConnect';
@@ -57,6 +57,8 @@ export function AtendimentoPage() {
   const [templates, setTemplates] = useState<ChatTemplate[]>([]);
   const [draft, setDraft] = useState('');
   const [templateName, setTemplateName] = useState('');
+  // Permite enviar template mesmo com a janela aberta (botão "Templates").
+  const [templateMode, setTemplateMode] = useState(false);
   const [sending, setSending] = useState(false);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -114,6 +116,7 @@ export function AtendimentoPage() {
       setSelectedId(id);
       setDraft('');
       setTemplateName('');
+      setTemplateMode(false);
       try {
         const res = await getMessages(id);
         setMessages(res.data);
@@ -138,7 +141,7 @@ export function AtendimentoPage() {
 
   async function handleSend() {
     if (!selectedId || sending) return;
-    const usingTemplate = !windowOpen;
+    const usingTemplate = !windowOpen || templateMode;
     if (usingTemplate && !templateName) return;
     if (!usingTemplate && !draft.trim()) return;
 
@@ -261,7 +264,36 @@ export function AtendimentoPage() {
               </div>
 
               <footer className="chat-composer">
-                {windowOpen ? (
+                {!windowOpen || templateMode ? (
+                  <>
+                    <span className="chat-composer-note">
+                      {windowOpen
+                        ? 'Modelos aprovados da conta do WhatsApp Business:'
+                        : 'Fora da janela de 24h — envie um template aprovado:'}
+                    </span>
+                    <select value={templateName} onChange={(e) => setTemplateName(e.target.value)}>
+                      <option value="">Selecione um template…</option>
+                      {templates.map((t) => (
+                        <option key={`${t.name}:${t.language}`} value={t.name}>
+                          {t.name} ({t.language})
+                        </option>
+                      ))}
+                    </select>
+                    {windowOpen && (
+                      <button
+                        type="button"
+                        className="chat-tpl-toggle"
+                        onClick={() => setTemplateMode(false)}
+                        title="Voltar para texto"
+                      >
+                        Texto
+                      </button>
+                    )}
+                    <button className="chat-send" onClick={() => void handleSend()} disabled={sending || !templateName}>
+                      Enviar
+                    </button>
+                  </>
+                ) : (
                   <>
                     <textarea
                       value={draft}
@@ -275,25 +307,17 @@ export function AtendimentoPage() {
                       placeholder="Escreva uma mensagem…"
                       rows={2}
                     />
+                    <button
+                      type="button"
+                      className="chat-tpl-toggle"
+                      onClick={() => setTemplateMode(true)}
+                      title="Enviar um template aprovado"
+                    >
+                      <LayoutTemplate size={16} />
+                      Templates
+                    </button>
                     <button className="chat-send" onClick={() => void handleSend()} disabled={sending || !draft.trim()}>
                       <Send size={16} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="chat-composer-note">
-                      Fora da janela de 24h — envie um template aprovado:
-                    </span>
-                    <select value={templateName} onChange={(e) => setTemplateName(e.target.value)}>
-                      <option value="">Selecione um template…</option>
-                      {templates.map((t) => (
-                        <option key={`${t.name}:${t.language}`} value={t.name}>
-                          {t.name} ({t.language})
-                        </option>
-                      ))}
-                    </select>
-                    <button className="chat-send" onClick={() => void handleSend()} disabled={sending || !templateName}>
-                      Enviar
                     </button>
                   </>
                 )}
