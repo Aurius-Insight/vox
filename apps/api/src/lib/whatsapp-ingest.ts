@@ -79,6 +79,25 @@ const STATUS_MAP: Record<string, 'sent' | 'delivered' | 'read' | 'failed'> = {
   failed: 'failed',
 };
 
+// Ordem do ciclo de vida — status so pode avancar (ver applyEvent).
+const STATUS_RANK: Record<string, number> = {
+  queued: 0,
+  received: 0,
+  sent: 1,
+  delivered: 2,
+  read: 3,
+};
+
+/**
+ * `true` se o novo status deve sobrescrever o atual. Status so AVANCA
+ * (sent < delivered < read), porque os webhooks da Meta chegam fora de ordem.
+ * `failed` so se aplica enquanto a msg nao foi entregue/lida.
+ */
+export function statusAdvances(current: string, next: 'sent' | 'delivered' | 'read' | 'failed'): boolean {
+  if (next === 'failed') return current !== 'delivered' && current !== 'read';
+  return STATUS_RANK[next] > (STATUS_RANK[current] ?? 0);
+}
+
 /** Acha o Lead vinculavel por telefone (cobre as formas com/sem o 9). */
 async function findLeadIdByPhone(phone: string): Promise<string | null> {
   const lead = await prisma.lead.findFirst({
@@ -142,19 +161,28 @@ async function applyEvent(event: ParsedEvent): Promise<void> {
   if (event.kind === 'status') {
     const mapped = STATUS_MAP[event.status];
     if (!mapped) return;
-    const result = await prisma.message.updateMany({
+    const current = await prisma.message.findUnique({
+      where: { waMessageId: event.waMessageId },
+      select: { conversationId: true, status: true },
+    });
+    if (!current) return;
+
+    // Status so AVANCA: sent < delivered < read. Os webhooks da Meta chegam
+    // fora de ordem (o `sent` pode ser processado depois do `delivered`), entao
+    // sem essa guarda o status retrocedia. `delivered`/`read` nunca viram
+    // `failed`; estados finais nao sao rebaixados.
+    if (!statusAdvances(current.status, mapped)) return;
+
+    await prisma.message.update({
       where: { waMessageId: event.waMessageId },
       data: { status: mapped },
     });
-    if (result.count > 0) {
-      const msg = await prisma.message.findUnique({
-        where: { waMessageId: event.waMessageId },
-        select: { conversationId: true },
-      });
-      if (msg) {
-        publishChatEvent({ type: 'message.status', conversationId: msg.conversationId, waMessageId: event.waMessageId, status: mapped });
-      }
-    }
+    publishChatEvent({
+      type: 'message.status',
+      conversationId: current.conversationId,
+      waMessageId: event.waMessageId,
+      status: mapped,
+    });
     return;
   }
 

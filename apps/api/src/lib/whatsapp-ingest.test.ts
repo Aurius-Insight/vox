@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { collectEvents, isWindowOpen, WINDOW_MS } from './whatsapp-ingest.js';
+import { collectEvents, isWindowOpen, statusAdvances, WINDOW_MS } from './whatsapp-ingest.js';
+
+describe('statusAdvances', () => {
+  it('avanca sent -> delivered -> read', () => {
+    expect(statusAdvances('sent', 'delivered')).toBe(true);
+    expect(statusAdvances('delivered', 'read')).toBe(true);
+  });
+  it('NAO retrocede (delivered nao volta para sent) — bug dos webhooks fora de ordem', () => {
+    expect(statusAdvances('delivered', 'sent')).toBe(false);
+    expect(statusAdvances('read', 'delivered')).toBe(false);
+    expect(statusAdvances('sent', 'sent')).toBe(false);
+  });
+  it('failed so antes de entregar', () => {
+    expect(statusAdvances('sent', 'failed')).toBe(true);
+    expect(statusAdvances('delivered', 'failed')).toBe(false);
+    expect(statusAdvances('read', 'failed')).toBe(false);
+  });
+});
 
 describe('isWindowOpen', () => {
   const now = new Date('2026-05-29T12:00:00Z');
