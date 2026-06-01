@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { env } from '../config/env.js';
@@ -7,6 +7,9 @@ import { prisma } from '../db/client.js';
 import { webhookLimiter } from '../middleware/rateLimit.js';
 import { ApiError, asyncHandler } from '../lib/http.js';
 import { getLeadStageIdBySlug } from '../lib/lead-stage-cache.js';
+import { verifyWebhookSignature } from '../lib/whatsapp.js';
+import { ingestWhatsAppPayload } from '../lib/whatsapp-ingest.js';
+import { logger } from '../lib/logger.js';
 
 const router = Router();
 
@@ -101,6 +104,60 @@ router.post(
       status: result.status,
       leadId: result.leadId,
     });
+  }),
+);
+
+// --- WhatsApp Cloud API (CoEx) ---
+
+// Verificacao do webhook (handshake da Meta): ela faz um GET com
+// `hub.mode=subscribe`, `hub.verify_token` e `hub.challenge`. Se o token casar
+// com o nosso, devolvemos o challenge cru em texto.
+router.get('/whatsapp', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+  const expected = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
+
+  if (mode === 'subscribe' && expected && token === expected) {
+    res.status(200).send(String(challenge ?? ''));
+    return;
+  }
+  res.sendStatus(403);
+});
+
+router.post(
+  '/whatsapp',
+  webhookLimiter,
+  asyncHandler(async (req, res) => {
+    const rawBody = (req as { rawBody?: Buffer }).rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
+    if (!verifyWebhookSignature(rawBody, req.get('X-Hub-Signature-256'))) {
+      throw new ApiError(401, 'invalid_signature', 'Assinatura do webhook invalida.');
+    }
+
+    // Responde 200 cedo (a Meta exige < ~30s); persistir/ingerir depois.
+    res.sendStatus(200);
+
+    const body = req.body;
+
+    // Auditoria: guarda o payload cru da entrega (idempotente por hash do corpo
+    // — reentregas da Meta tem o mesmo corpo, entao deduplicam).
+    const deliveryHash = createHash('sha256').update(rawBody).digest('hex');
+    try {
+      await prisma.integrationEvent.create({
+        data: {
+          source: 'whatsapp',
+          externalEventId: `wa:delivery:${deliveryHash}`,
+          payload: body as Prisma.InputJsonValue,
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) {
+        logger.error('whatsapp_audit_persist_failed', { deliveryHash });
+      }
+    }
+
+    // Ingestao: transforma em Conversation/Message e emite no event bus (SSE).
+    await ingestWhatsAppPayload(body);
   }),
 );
 

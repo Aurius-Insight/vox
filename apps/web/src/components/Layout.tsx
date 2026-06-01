@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   LogOut,
+  MessageCircle,
   PanelLeft,
   Presentation,
   Settings,
@@ -23,6 +24,7 @@ import { ThemeToggle } from './ThemeToggle';
 const NAV_ICONS: Record<string, LucideIcon> = {
   '/dashboard': LayoutDashboard,
   '/vendas': TrendingUp,
+  '/atendimento': MessageCircle,
   '/coordenacao': CalendarDays,
   '/coordenacao/presenca': ClipboardCheck,
   '/alunos': GraduationCap,
