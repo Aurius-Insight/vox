@@ -6,6 +6,9 @@ export const ROLE_LABELS: Record<Role, string> = {
   diretor: 'Diretor',
   coordenacao: 'Coordenacao',
   professor: 'Professor',
+  // Papel tecnico (analista da Meta) — fora do ROLE_VALUES, nao aparece no
+  // cadastro de usuarios; criado via script.
+  revisor: 'Revisor',
 };
 
 export type Subject = {

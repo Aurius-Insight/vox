@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from '../api/client';
 
-export type Role = 'diretor' | 'coordenacao' | 'professor';
+export type Role = 'diretor' | 'coordenacao' | 'professor' | 'revisor';
 
 export type User = {
   id: string;

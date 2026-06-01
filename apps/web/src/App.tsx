@@ -73,7 +73,7 @@ export default function App() {
                 <Route path="/vendas" element={<LeadsPage />} />
               </Route>
 
-              <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
+              <Route element={<RequireAuth roles={['diretor', 'coordenacao', 'revisor']} />}>
                 <Route path="/atendimento" element={<AtendimentoPage />} />
               </Route>
 

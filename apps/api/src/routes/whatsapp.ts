@@ -18,10 +18,12 @@ import { publishChatEvent, subscribeChatEvents } from '../lib/whatsapp-events.js
 
 const router = Router();
 
-// Acesso identico a Vendas: diretor + coordenacao (caixa compartilhada).
-const guard = [requireAuth, requireRole('diretor', 'coordenacao')] as const;
-// Conectar/desconectar o numero oficial e so do diretor.
-const adminGuard = [requireAuth, requireRole('diretor')] as const;
+// Acesso ao Atendimento: diretor + coordenacao e o papel `revisor` (analista da
+// Meta no App Review — restrito ao Atendimento, sem dados reais de aluno/lead).
+const guard = [requireAuth, requireRole('diretor', 'coordenacao', 'revisor')] as const;
+// Conectar o numero oficial: diretor + revisor (revisor consegue abrir o
+// Embedded Signup p/ demonstrar o Facebook Login; o POST real fica no diretor).
+const adminGuard = [requireAuth, requireRole('diretor', 'revisor')] as const;
 const GRAPH = 'https://graph.facebook.com';
 
 type ConversationWithLast = Conversation & { messages: Message[] };

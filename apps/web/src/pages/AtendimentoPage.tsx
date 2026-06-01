@@ -48,7 +48,10 @@ const STATUS_LABEL: Record<string, string> = {
 export function AtendimentoPage() {
   const toast = useToast();
   const auth = useAuth();
-  const isDiretor = (auth.user?.roles ?? []).includes('diretor');
+  // Diretor conecta o numero; o revisor (App Review) tambem ve o botao p/
+  // demonstrar o Facebook Login do Embedded Signup.
+  const roles = auth.user?.roles ?? [];
+  const canConnect = roles.includes('diretor') || roles.includes('revisor');
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -168,7 +171,7 @@ export function AtendimentoPage() {
     <div className="app-page chat-page">
       <div className="page-header">
         <h1>Atendimento</h1>
-        {isDiretor && <WhatsAppConnect />}
+        {canConnect && <WhatsAppConnect />}
       </div>
 
       <div className="chat-layout">

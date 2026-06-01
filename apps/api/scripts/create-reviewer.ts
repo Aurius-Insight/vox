@@ -22,7 +22,7 @@ if (!PASSWORD || PASSWORD.length < 12) {
 
 async function main() {
   const passwordHash = await bcrypt.hash(PASSWORD, 12);
-  const roles: Role[] = ['coordenacao'];
+  const roles: Role[] = [(process.env.REVIEWER_ROLE as Role) ?? 'revisor'];
   const user = await prisma.user.upsert({
     where: { email: EMAIL.toLowerCase() },
     update: { name: 'App Reviewer', passwordHash, roles, active: true },

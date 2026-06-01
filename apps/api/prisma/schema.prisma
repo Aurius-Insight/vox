@@ -12,6 +12,9 @@ enum Role {
   diretor
   coordenacao
   professor
+  // Papel restrito p/ o analista da Meta (App Review): so enxerga o Atendimento,
+  // nenhum dado real de aluno/lead. Ver apps/api/scripts/create-reviewer.ts.
+  revisor
 }
 
 enum LeadStageKind {
