@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { isProduction } from '../config/env.js';
 import { prisma } from '../db/client.js';
+import { brazilSendNumber } from './phone.js';
 import { logger } from './logger.js';
 
 // Cliente fino da WhatsApp Cloud API (modo Coexistence/CoEx). Espelha o padrao
@@ -106,7 +107,7 @@ async function postMessage(body: Record<string, unknown>): Promise<SendResult> {
 /** Texto livre — so entrega dentro da janela de atendimento de 24h. */
 export async function sendText(toPhone: string, text: string): Promise<SendResult> {
   return postMessage({
-    to: toPhone.replace(/\D/g, ''),
+    to: brazilSendNumber(toPhone),
     type: 'text',
     text: { preview_url: false, body: text },
   });
@@ -120,7 +121,7 @@ export async function sendTemplate(
   components?: unknown[],
 ): Promise<SendResult> {
   return postMessage({
-    to: toPhone.replace(/\D/g, ''),
+    to: brazilSendNumber(toPhone),
     type: 'template',
     template: {
       name,

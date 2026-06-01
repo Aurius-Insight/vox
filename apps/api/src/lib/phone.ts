@@ -44,3 +44,19 @@ export function brazilPhoneCandidates(raw: string | null | undefined): string[] 
   }
   return [...out];
 }
+
+/**
+ * Forma canonica para ENVIAR a um numero brasileiro pela Cloud API: garante o
+ * 9o digito (13 digitos: 55 + DDD + 9 + 8). A Meta devolve `wa_id` sem o 9
+ * (12 digitos), mas envios sao mais confiaveis na forma com 9 — e a lista de
+ * destinatarios do numero de teste exige a forma cadastrada (com 9).
+ * Numeros nao-BR ou ja com 9 passam inalterados.
+ */
+export function brazilSendNumber(raw: string | null | undefined): string {
+  const d = normalizePhone(raw);
+  // 55 + DDD(2) + assinante(8, sem o 9) -> insere o 9 apos o DDD.
+  if (d.startsWith('55') && d.length === 12) {
+    return `${d.slice(0, 4)}9${d.slice(4)}`;
+  }
+  return d;
+}

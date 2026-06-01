@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { brazilPhoneCandidates, normalizePhone } from './phone.js';
+import { brazilPhoneCandidates, brazilSendNumber, normalizePhone } from './phone.js';
+
+describe('brazilSendNumber', () => {
+  it('insere o 9 no numero BR sem o 9 (wa_id da Meta -> envio)', () => {
+    expect(brazilSendNumber('556181508486')).toBe('5561981508486');
+  });
+  it('mantem numero BR que ja tem o 9', () => {
+    expect(brazilSendNumber('5561981508486')).toBe('5561981508486');
+  });
+  it('mantem numero sem codigo de pais inalterado', () => {
+    expect(brazilSendNumber('21999998888')).toBe('21999998888');
+  });
+});
 
 describe('normalizePhone', () => {
   it('reduz a digitos', () => {
