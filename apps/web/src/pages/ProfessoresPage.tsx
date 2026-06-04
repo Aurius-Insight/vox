@@ -1,10 +1,21 @@
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
-import { api } from '../api/client';
+import { ApiClientError, api } from '../api/client';
 import type { AppUser, Subject, TeachingHistory, Unit } from '../api/types';
+import { Modal } from '../components/Modal';
 import { TeachingHistoryView } from '../components/TeacherHistoryView';
 import { useToast } from '../components/ToastProvider';
+
+type TeacherForm = {
+  name: string;
+  email: string;
+  password: string;
+  subjectId: string;
+  unitId: string;
+};
+
+const EMPTY_FORM: TeacherForm = { name: '', email: '', password: '', subjectId: '', unitId: '' };
 
 // Destaca o trecho que casou com a busca atual. Mesmo padrao da AlunosPage —
 // se for usado em mais lugares, promover pra util compartilhado.
@@ -40,6 +51,13 @@ export function ProfessoresPage() {
   const [unitFilter, setUnitFilter] = useState<string>('');
   const [subjectFilter, setSubjectFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'todos' | 'ativos' | 'inativos'>('ativos');
+
+  // Cadastro/edicao de professor (mesmo padrao das Escolas).
+  const [form, setForm] = useState<TeacherForm>(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string>();
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingId, setPendingId] = useState<string>();
 
   const loadTeachers = useCallback(async () => {
     setLoadingList(true);
@@ -94,6 +112,109 @@ export function ProfessoresPage() {
     }
   }
 
+  function updateField(field: keyof TeacherForm, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function openNew() {
+    setEditingId(undefined);
+    setForm(EMPTY_FORM);
+    setShowForm(true);
+  }
+
+  function startEdit(teacher: AppUser) {
+    setEditingId(teacher.id);
+    setForm({
+      name: teacher.name,
+      email: teacher.email,
+      password: '',
+      subjectId: teacher.subjectId ?? '',
+      unitId: teacher.unitId ?? '',
+    });
+    setShowForm(true);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(undefined);
+    setForm(EMPTY_FORM);
+  }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const isEdit = Boolean(editingId);
+
+    if (form.name.trim().length < 2) {
+      toast.error('Informe o nome do professor.');
+      return;
+    }
+    if (!form.subjectId) {
+      toast.error('Selecione a materia do professor.');
+      return;
+    }
+    if (!isEdit) {
+      if (!form.email.trim()) {
+        toast.error('Informe o e-mail.');
+        return;
+      }
+      if (form.password.length < 12) {
+        toast.error('A senha precisa de ao menos 12 caracteres.');
+        return;
+      }
+    } else if (form.password && form.password.length < 12) {
+      toast.error('A nova senha precisa de ao menos 12 caracteres.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (isEdit) {
+        // E-mail nao e editavel pela API; senha so vai se preenchida.
+        const payload: Record<string, unknown> = {
+          name: form.name.trim(),
+          subjectId: form.subjectId,
+          unitId: form.unitId || null,
+        };
+        if (form.password) payload.password = form.password;
+        await api(`/api/users/${editingId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      } else {
+        await api('/api/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: form.name.trim(),
+            email: form.email.trim(),
+            password: form.password,
+            roles: ['professor'],
+            subjectId: form.subjectId,
+            unitId: form.unitId || undefined,
+          }),
+        });
+      }
+      toast.success(isEdit ? 'Professor atualizado.' : 'Professor criado.');
+      closeForm();
+      await loadTeachers();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar o professor.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggle(teacher: AppUser) {
+    setPendingId(teacher.id);
+    try {
+      await api(`/api/users/${teacher.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: !teacher.active }),
+      });
+      await loadTeachers();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : 'Nao foi possivel alterar o status.');
+    } finally {
+      setPendingId(undefined);
+    }
+  }
+
   return (
     <main className="app-page">
       <header className="page-header">
@@ -101,7 +222,84 @@ export function ProfessoresPage() {
           <p className="eyebrow">Professores</p>
           <h1>Perfil do professor</h1>
         </div>
+        <button type="button" onClick={openNew}>
+          Novo professor
+        </button>
       </header>
+
+      {showForm && (
+        <Modal title={editingId ? 'Editar professor' : 'Novo professor'} onClose={closeForm}>
+          <form className="grid-form" onSubmit={handleSubmit}>
+            <label>
+              Nome
+              <input
+                value={form.name}
+                onChange={(event) => updateField('name', event.target.value)}
+                placeholder="Nome do professor"
+                autoFocus
+              />
+            </label>
+            <label>
+              E-mail
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) => updateField('email', event.target.value)}
+                placeholder="email@voxrio.xyz"
+                disabled={Boolean(editingId)}
+              />
+            </label>
+            <label>
+              {editingId ? 'Nova senha (opcional)' : 'Senha'}
+              <input
+                type="password"
+                value={form.password}
+                onChange={(event) => updateField('password', event.target.value)}
+                placeholder={editingId ? 'Deixe em branco para manter' : 'Min. 12 caracteres'}
+                autoComplete="new-password"
+              />
+            </label>
+            <label>
+              Materia
+              <select
+                value={form.subjectId}
+                onChange={(event) => updateField('subjectId', event.target.value)}
+              >
+                <option value="">Selecione a materia...</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Escola (opcional)
+              <select
+                value={form.unitId}
+                onChange={(event) => updateField('unitId', event.target.value)}
+              >
+                <option value="">Sem escola fixa</option>
+                {units
+                  .filter((unit) => unit.active)
+                  .map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <div className="grid-form-actions">
+              <button type="submit" disabled={saving}>
+                {saving ? 'Salvando...' : editingId ? 'Salvar' : 'Criar professor'}
+              </button>
+              <button type="button" className="secondary-button" onClick={closeForm}>
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       <div className="filter-bar" role="search">
         <label className="filter-bar-search">
@@ -163,19 +361,20 @@ export function ProfessoresPage() {
         <section className="table-card">
           {loadingList && <p className="muted-text">Carregando professores...</p>}
           {!loadingList && (
-            <table>
+            <table className="cards-table">
               <thead>
                 <tr>
                   <th>Nome</th>
                   <th>Materia</th>
                   <th>Escola</th>
                   <th>Status</th>
+                  <th>Acoes</th>
                 </tr>
               </thead>
               <tbody>
                 {visibleTeachers.length === 0 && (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={5}>
                       {teachers.length === 0
                         ? 'Nenhum professor cadastrado.'
                         : 'Nenhum professor encontrado com esses filtros.'}
@@ -188,13 +387,42 @@ export function ProfessoresPage() {
                     onClick={() => void openTeacher(teacher.id)}
                     className={teacher.id === selectedId ? 'row-selected' : undefined}
                   >
-                    <td>{highlightMatch(teacher.name, search)}</td>
-                    <td>{teacher.subject?.name ?? '-'}</td>
-                    <td>{teacher.unit?.name ?? '-'}</td>
-                    <td>
+                    <td data-label="Nome">{highlightMatch(teacher.name, search)}</td>
+                    <td data-label="Materia">{teacher.subject?.name ?? '-'}</td>
+                    <td data-label="Escola">{teacher.unit?.name ?? '-'}</td>
+                    <td data-label="Status">
                       <span className="status-chip">
                         {teacher.active ? 'Ativo' : 'Inativo'}
                       </span>
+                    </td>
+                    <td data-label="Acoes">
+                      <div className="row-actions">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            startEdit(teacher);
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={pendingId === teacher.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleToggle(teacher);
+                          }}
+                        >
+                          {pendingId === teacher.id
+                            ? '...'
+                            : teacher.active
+                              ? 'Desativar'
+                              : 'Ativar'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

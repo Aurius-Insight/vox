@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
+  BookOpen,
   Building2,
   CalendarDays,
   ClipboardCheck,
@@ -9,11 +10,13 @@ import {
   LayoutDashboard,
   LifeBuoy,
   LogOut,
+  Menu,
   MessageCircle,
   PanelLeft,
   Presentation,
   Settings,
   TrendingUp,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
@@ -30,6 +33,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   '/alunos': GraduationCap,
   '/professores': Presentation,
   '/unidades': Building2,
+  '/materias': BookOpen,
   '/configuracoes': Settings,
   '/ajuda': LifeBuoy,
 };
@@ -48,6 +52,8 @@ export function Layout() {
   const roles = auth.user?.roles ?? [];
   const items = navItemsForRoles(roles);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  // Drawer do menu no mobile (off-canvas). No desktop o sidebar e fixo.
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -57,14 +63,50 @@ export function Layout() {
     }
   }, [collapsed]);
 
+  // Fecha o drawer ao navegar (mobile).
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [location.pathname]);
+
   return (
-    <div className="app-shell" data-collapsed={collapsed}>
+    <div className="app-shell" data-collapsed={collapsed} data-drawer={drawerOpen}>
+      {/* Barra superior so no mobile: hamburguer + marca (CSS esconde no desktop). */}
+      <header className="app-topbar">
+        <button
+          type="button"
+          className="app-topbar-burger"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Abrir menu"
+        >
+          <Menu size={22} />
+        </button>
+        <span className="brand-mark">Vox Rio</span>
+      </header>
+
+      {/* Backdrop do drawer (mobile) — clicar fecha. */}
+      <button
+        type="button"
+        className="app-drawer-overlay"
+        aria-label="Fechar menu"
+        tabIndex={-1}
+        onClick={() => setDrawerOpen(false)}
+      />
+
       <aside className="app-sidebar">
         <div className="sidebar-top">
           <div className="brand">
             <span className="brand-mark">Vox Rio</span>
             <span className="brand-sub sidebar-label">Sistema interno</span>
           </div>
+          <button
+            type="button"
+            className="sidebar-drawer-close"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Fechar menu"
+            title="Fechar menu"
+          >
+            <X size={18} />
+          </button>
           <button
             type="button"
             className="sidebar-toggle"
@@ -85,6 +127,7 @@ export function Layout() {
                 to={item.to}
                 end
                 title={item.label}
+                onClick={() => setDrawerOpen(false)}
                 className={({ isActive }) => (isActive ? 'active' : undefined)}
               >
                 {Icon && <Icon className="nav-icon" size={18} />}

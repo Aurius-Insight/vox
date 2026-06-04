@@ -13,6 +13,7 @@ import { AtendimentoPage } from './pages/AtendimentoPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { LeadsPage } from './pages/LeadsPage';
 import { LoginPage } from './pages/LoginPage';
+import { MateriasPage } from './pages/MateriasPage';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { PortalHomePage } from './pages/PortalHomePage';
 import { PortalLoginPage } from './pages/PortalLoginPage';
@@ -97,6 +98,10 @@ export default function App() {
 
               <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
                 <Route path="/unidades" element={<UnidadesPage />} />
+              </Route>
+
+              <Route element={<RequireAuth roles={['diretor']} />}>
+                <Route path="/materias" element={<MateriasPage />} />
               </Route>
 
               <Route element={<RequireAuth roles={['diretor']} />}>

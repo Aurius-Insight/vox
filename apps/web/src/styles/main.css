@@ -912,6 +912,14 @@ tbody tr:last-child td {
   min-width: 0;
 }
 
+/* Topbar/hamburguer, backdrop e botao de fechar do drawer: so existem no
+   mobile. No desktop ficam escondidos (o sidebar e fixo lateral). */
+.app-topbar,
+.app-drawer-overlay,
+.sidebar-drawer-close {
+  display: none;
+}
+
 /* Formularios e blocos de conteudo */
 .form-card {
   display: grid;
@@ -1211,22 +1219,115 @@ tr.row-selected {
     grid-template-columns: 1fr;
   }
 
+  /* Topbar mobile com hamburguer */
+  .app-topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.55rem 0.9rem;
+    background: var(--sidebar-bg);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .app-topbar-burger {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--text);
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.4rem;
+  }
+
+  .app-topbar-burger:hover:not(:disabled) {
+    background: var(--surface-2);
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* Sidebar vira drawer off-canvas (desliza da esquerda). */
   .app-sidebar {
-    flex-direction: column;
-    gap: 1rem;
-    height: auto;
-    padding: 1rem;
-    position: static;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(82vw, 290px);
+    height: 100dvh;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform var(--motion-base) var(--ease-out);
+    overflow-y: auto;
+  }
+
+  .app-shell[data-drawer='true'] .app-sidebar {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Backdrop */
+  .app-drawer-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    border: none;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--motion-base) var(--ease-out);
+  }
+
+  .app-shell[data-drawer='true'] .app-drawer-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Botao de fechar dentro do drawer; o toggle de retrair some no mobile. */
+  .sidebar-drawer-close {
+    display: inline-flex;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    color: var(--text-muted);
+    min-height: auto;
+    padding: 0.4rem;
+  }
+  .sidebar-toggle {
+    display: none;
   }
 
   .app-nav {
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    overflow-x: auto;
+    grid-auto-flow: row;
   }
 
   .app-user {
-    margin-top: 0;
+    margin-top: auto;
+  }
+
+  /* No mobile o drawer mostra sempre o menu completo, ignorando o estado
+     "retraido" que o usuario possa ter deixado salvo no desktop. */
+  .app-shell[data-collapsed='true'] .sidebar-label {
+    display: initial;
+  }
+  .app-shell[data-collapsed='true'] .brand {
+    display: grid;
+  }
+  .app-shell[data-collapsed='true'] .sidebar-top {
+    justify-content: space-between;
+  }
+  .app-shell[data-collapsed='true'] .app-sidebar {
+    padding-left: 1.1rem;
+    padding-right: 1.1rem;
+  }
+  .app-shell[data-collapsed='true'] .app-nav a,
+  .app-shell[data-collapsed='true'] .sidebar-action {
+    justify-content: flex-start;
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
   }
 
   .app-page {
@@ -1670,6 +1771,63 @@ tr.row-selected {
   }
   .table-card table {
     min-width: 520px;
+  }
+
+  /* Tabelas marcadas como .cards-table viram CARDS no celular (Alunos,
+     Professores): cada linha vira um cartao e cada celula leva seu rotulo
+     (data-label) em vez de depender do cabecalho. */
+  .cards-table {
+    min-width: 0 !important;
+  }
+  .cards-table thead {
+    display: none;
+  }
+  .cards-table tbody,
+  .cards-table tr,
+  .cards-table td {
+    display: block;
+    width: 100%;
+  }
+  .cards-table tr {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 0.7rem;
+    padding: 0.35rem 0.2rem;
+  }
+  .cards-table tr.row-selected {
+    border-color: var(--accent);
+  }
+  .cards-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    border: none;
+    padding: 0.4rem 0.75rem;
+    text-align: right;
+  }
+  .cards-table td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+  /* Primeira celula (nome) vira o "titulo" do cartao. */
+  .cards-table td:first-child {
+    font-size: 1.02rem;
+    font-weight: 700;
+    padding-top: 0.55rem;
+  }
+  .cards-table td:first-child::before,
+  .cards-table td[data-label='Acoes']::before {
+    display: none;
+  }
+  .cards-table td[data-label='Acoes'] {
+    justify-content: flex-end;
   }
 
   /* Cabeçalho de tabela (titulo + acao) empilha */

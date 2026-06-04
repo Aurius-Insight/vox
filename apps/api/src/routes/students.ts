@@ -363,7 +363,10 @@ router.get(
         name: student.name,
         type: student.type,
         enrollmentCode: student.enrollmentCode,
-        whatsapp: maskPhone(student.whatsapp),
+        // WhatsApp sem mascara na FICHA do aluno: so diretor/coordenacao
+        // acessam esta tela e precisam do numero pra contatar. CPF segue
+        // mascarado (cpfMasked). Lista e demais respostas continuam mascaradas.
+        whatsapp: student.whatsapp,
         email: student.email ?? undefined,
         cpf: student.cpfMasked ?? undefined,
         unitId: student.unitId,
@@ -404,7 +407,9 @@ const HistoryQuerySchema = z.object({
   since: z.string().datetime().optional(),
 });
 
-const HISTORY_DEFAULT_WINDOW_DAYS = 90;
+// 730 dias (~2 anos): cobre o backfill historico das planilhas (aulas de
+// 2024/2025). A aba Historico pode pedir uma janela menor via `?since=`.
+const HISTORY_DEFAULT_WINDOW_DAYS = 730;
 const HISTORY_MAX_EVENTS_PER_TYPE = 500;
 
 // Historico individual do aluno: KPIs (janela configuravel, default 90 dias)
