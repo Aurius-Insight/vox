@@ -176,7 +176,9 @@ async function main() {
       unitInterest: 'Matriz',
       campaign: 'CP01 Oratoria Advogados',
       source: 'Meta Ads',
-      stage: 'novo_lead',
+      // LeadStage virou tabela (migration lead_stage_to_table): conecta por
+      // slug em vez de string. As etapas sistemicas vem da migration.
+      stage: { connect: { slug: 'novo_lead' } },
     },
   });
 
@@ -189,7 +191,7 @@ async function main() {
       whatsapp: '21999887766',
       unitInterest: 'Barra',
       source: 'Indicacao',
-      stage: 'em_atendimento',
+      stage: { connect: { slug: 'em_atendimento' } },
     },
   });
 
