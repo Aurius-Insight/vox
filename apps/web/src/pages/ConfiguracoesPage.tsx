@@ -57,6 +57,8 @@ export function ConfiguracoesPage() {
   const [editingPackageId, setEditingPackageId] = useState<string>();
   const [showPackageForm, setShowPackageForm] = useState(false);
   const [showUserForm, setShowUserForm] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string>();
+  const [showStaffLinks, setShowStaffLinks] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -174,41 +176,98 @@ export function ConfiguracoesPage() {
     }
   }
 
-  async function handleCreateUser(event: FormEvent) {
+  function openNewUser() {
+    setEditingUserId(undefined);
+    setUserForm(EMPTY_USER);
+    setShowUserForm(true);
+  }
+
+  // Edicao preserva os papeis nao-editaveis aqui (ex.: professor/revisor):
+  // o form so alterna diretor/coordenacao, e o restante segue no userForm.
+  function startEditUser(user: AppUser) {
+    setEditingUserId(user.id);
+    setUserForm({
+      name: user.name,
+      email: user.email,
+      password: '',
+      roles: user.roles,
+      subjectId: user.subjectId ?? '',
+      unitId: user.unitId ?? '',
+    });
+    setShowUserForm(true);
+  }
+
+  async function handleSaveUser(event: FormEvent) {
     event.preventDefault();
     setError('');
 
+    const isEdit = Boolean(editingUserId);
     if (userForm.roles.length === 0) {
       setError('Selecione ao menos um papel para o usuario.');
       return;
     }
-
     const isProfessor = userForm.roles.includes('professor');
     if (isProfessor && !userForm.subjectId) {
       setError('Professor precisa de uma materia vinculada.');
       return;
     }
+    if (isEdit && userForm.password && userForm.password.length < 12) {
+      setError('A nova senha precisa de ao menos 12 caracteres.');
+      return;
+    }
 
     setSavingUser(true);
     try {
-      await api<{ data: AppUser }>('/api/users', {
-        method: 'POST',
-        body: JSON.stringify({
+      if (isEdit) {
+        // E-mail nao e editavel; senha so vai se preenchida.
+        const payload: Record<string, unknown> = {
           name: userForm.name,
-          email: userForm.email,
-          password: userForm.password,
           roles: userForm.roles,
-          subjectId: isProfessor ? userForm.subjectId : undefined,
-          unitId: userForm.unitId || undefined,
-        }),
-      });
+          unitId: userForm.unitId || null,
+        };
+        if (isProfessor) payload.subjectId = userForm.subjectId;
+        if (userForm.password) payload.password = userForm.password;
+        await api(`/api/users/${editingUserId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await api<{ data: AppUser }>('/api/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: userForm.name,
+            email: userForm.email,
+            password: userForm.password,
+            roles: userForm.roles,
+            subjectId: isProfessor ? userForm.subjectId : undefined,
+            unitId: userForm.unitId || undefined,
+          }),
+        });
+      }
       setUserForm(EMPTY_USER);
+      setEditingUserId(undefined);
       setShowUserForm(false);
       await load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel criar o usuario.');
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar o usuario.');
     } finally {
       setSavingUser(false);
+    }
+  }
+
+  // Links publicos de cadastro de EQUIPE (staff/admin) — copiar e enviar.
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const staffLinks = [
+    { label: 'Professor', url: `${origin}/cadastro-professor` },
+    { label: 'Coordenacao', url: `${origin}/cadastro-coordenacao` },
+    { label: 'Administrador', url: `${origin}/cadastro-administrador` },
+  ];
+  async function copyUrl(url: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(`Link ${label} copiado!`);
+    } catch {
+      toast.error('Nao foi possivel copiar: ' + url);
     }
   }
 
@@ -258,14 +317,46 @@ export function ConfiguracoesPage() {
           <h1>Administracao</h1>
         </div>
         <div className="row-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setShowStaffLinks(true)}
+          >
+            Links de cadastro (equipe)
+          </button>
           <button type="button" className="secondary-button" onClick={openNewPackage}>
             Novo pacote
           </button>
-          <button type="button" onClick={() => setShowUserForm(true)}>
+          <button type="button" onClick={openNewUser}>
             Novo usuario
           </button>
         </div>
       </header>
+
+      {showStaffLinks && (
+        <Modal title="Links de cadastro da equipe" onClose={() => setShowStaffLinks(false)}>
+          <p className="muted-text">
+            Copie e envie o link do papel desejado. A pessoa cria a propria conta (ativa na hora).
+          </p>
+          <ul className="signup-links">
+            {staffLinks.map((link) => (
+              <li key={link.url}>
+                <div>
+                  <strong>{link.label}</strong>
+                  <span className="muted-text">{link.url}</span>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void copyUrl(link.url, link.label)}
+                >
+                  Copiar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
 
       {showPackageForm && (
         <Modal
@@ -406,12 +497,18 @@ export function ConfiguracoesPage() {
       </section>
 
       {showUserForm && (
-        <Modal title="Novo usuario" onClose={() => setShowUserForm(false)}>
+        <Modal
+          title={editingUserId ? 'Editar usuario' : 'Novo usuario'}
+          onClose={() => {
+            setShowUserForm(false);
+            setEditingUserId(undefined);
+          }}
+        >
           <p className="muted-text">
-          Defina a senha inicial e repasse ao usuario. Use os papeis para liberar o acesso de cada
-          area. Professores sao cadastrados na pagina Professores.
+          Use os papeis para liberar o acesso de cada area. Professores sao gerenciados na pagina
+          Professores (materia, etc.).
         </p>
-        <form className="grid-form" onSubmit={handleCreateUser}>
+        <form className="grid-form" onSubmit={handleSaveUser}>
           <label>
             Nome
             <input
@@ -426,17 +523,19 @@ export function ConfiguracoesPage() {
               type="email"
               value={userForm.email}
               onChange={(event) => updateUserField('email', event.target.value)}
+              disabled={Boolean(editingUserId)}
               required
             />
           </label>
           <label>
-            Senha inicial
+            {editingUserId ? 'Nova senha (opcional)' : 'Senha inicial'}
             <input
               type="password"
               minLength={12}
               value={userForm.password}
               onChange={(event) => updateUserField('password', event.target.value)}
-              required
+              placeholder={editingUserId ? 'Deixe em branco para manter' : undefined}
+              required={!editingUserId}
             />
           </label>
           <div className="role-options">
@@ -469,7 +568,7 @@ export function ConfiguracoesPage() {
           </label>
           <div className="grid-form-actions">
             <button type="submit" disabled={savingUser}>
-              {savingUser ? 'Salvando...' : 'Criar usuario'}
+              {savingUser ? 'Salvando...' : editingUserId ? 'Salvar' : 'Criar usuario'}
             </button>
           </div>
         </form>
@@ -510,18 +609,27 @@ export function ConfiguracoesPage() {
                 <td>{user.unit?.name ?? 'Todas'}</td>
                 <td>{user.active ? 'ativo' : 'inativo'}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    disabled={pendingUserId === user.id}
-                    onClick={() => void handleToggleActive(user)}
-                  >
-                    {pendingUserId === user.id
-                      ? 'Salvando...'
-                      : user.active
-                        ? 'Desativar'
-                        : 'Ativar'}
-                  </button>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => startEditUser(user)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={pendingUserId === user.id}
+                      onClick={() => void handleToggleActive(user)}
+                    >
+                      {pendingUserId === user.id
+                        ? 'Salvando...'
+                        : user.active
+                          ? 'Desativar'
+                          : 'Ativar'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
