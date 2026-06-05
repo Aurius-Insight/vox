@@ -132,8 +132,7 @@ export function AlunosPage() {
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
-  const [adjustAmount, setAdjustAmount] = useState('1');
-  const [adjustSaving, setAdjustSaving] = useState(false);
+  const [adjustingRowId, setAdjustingRowId] = useState<string>();
   const [enrollForm, setEnrollForm] = useState<{ packageId: string; cpf: string }>({
     packageId: '',
     cpf: '',
@@ -409,29 +408,25 @@ export function AlunosPage() {
     }
   }
 
-  // Ajuste manual de saldo (+/-) na ficha. `sign` define somar ou subtrair.
-  async function handleAdjustCredits(sign: 1 | -1) {
-    if (!selected) return;
-    const amount = Math.abs(Number.parseInt(adjustAmount, 10) || 0);
-    if (amount < 1) {
-      setError('Informe uma quantidade de aulas valida.');
-      return;
-    }
-    setError('');
-    setInfo('');
-    setAdjustSaving(true);
+  // Ajuste de saldo (+/- 1) direto na coluna da tabela. Atualiza so a linha.
+  async function handleRowAdjust(studentId: string, sign: 1 | -1) {
+    setAdjustingRowId(studentId);
     try {
       const response = await api<{ data: { creditBalance: number } }>(
-        `/api/students/${selected.id}/credits`,
-        { method: 'PATCH', body: JSON.stringify({ delta: sign * amount }) },
+        `/api/students/${studentId}/credits`,
+        { method: 'PATCH', body: JSON.stringify({ delta: sign }) },
       );
-      setInfo(`Saldo ajustado para ${response.data.creditBalance} aulas.`);
-      await openStudent(selected.id);
-      await load();
+      setStudents((list) =>
+        list.map((item) =>
+          item.id === studentId ? { ...item, creditBalance: response.data.creditBalance } : item,
+        ),
+      );
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel ajustar o saldo.');
+      toast.error(
+        err instanceof ApiClientError ? err.message : 'Nao foi possivel ajustar o saldo.',
+      );
     } finally {
-      setAdjustSaving(false);
+      setAdjustingRowId(undefined);
     }
   }
 
@@ -954,7 +949,37 @@ export function AlunosPage() {
                   </td>
                   <td data-label="Matricula">{highlightMatch(student.enrollmentCode, search)}</td>
                   <td data-label="Escola">{student.unitName ?? '-'}</td>
-                  <td data-label="Saldo">{student.creditBalance}</td>
+                  <td data-label="Saldo">
+                    <div className="saldo-cell">
+                      <span className="saldo-value">{student.creditBalance}</span>
+                      {canOperate && (
+                        <span className="saldo-buttons">
+                          <button
+                            type="button"
+                            aria-label="Subtrair 1 aula"
+                            disabled={adjustingRowId === student.id || student.creditBalance <= 0}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleRowAdjust(student.id, -1);
+                            }}
+                          >
+                            −
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Adicionar 1 aula"
+                            disabled={adjustingRowId === student.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleRowAdjust(student.id, 1);
+                            }}
+                          >
+                            +
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1172,41 +1197,6 @@ export function AlunosPage() {
                       </button>
                     </div>
                   </form>
-                </div>
-              )}
-
-              {activeTab === 'cadastro' && canOperate && (
-                <div>
-                  <h3>Ajustar saldo</h3>
-                  <p className="muted-text">
-                    Saldo atual: <strong>{selected.creditBalance}</strong> aulas. Some ou subtraia
-                    manualmente (registrado em auditoria).
-                  </p>
-                  <div className="credit-adjust">
-                    <input
-                      type="number"
-                      min={1}
-                      value={adjustAmount}
-                      onChange={(event) => setAdjustAmount(event.target.value)}
-                      aria-label="Quantidade de aulas"
-                    />
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={adjustSaving}
-                      onClick={() => void handleAdjustCredits(1)}
-                    >
-                      + Adicionar
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      disabled={adjustSaving}
-                      onClick={() => void handleAdjustCredits(-1)}
-                    >
-                      − Subtrair
-                    </button>
-                  </div>
                 </div>
               )}
 
