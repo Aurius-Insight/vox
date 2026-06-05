@@ -132,6 +132,8 @@ export function AlunosPage() {
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
+  const [adjustAmount, setAdjustAmount] = useState('1');
+  const [adjustSaving, setAdjustSaving] = useState(false);
   const [enrollForm, setEnrollForm] = useState<{ packageId: string; cpf: string }>({
     packageId: '',
     cpf: '',
@@ -166,6 +168,7 @@ export function AlunosPage() {
     matriculado: string | null;
     experimental: string | null;
   }>();
+  const [showLinks, setShowLinks] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -198,20 +201,34 @@ export function AlunosPage() {
       .catch(() => setSignupLinks(undefined));
   }, [canOperate]);
 
-  async function copySignupLink(type: 'matriculado' | 'experimental') {
-    const token = signupLinks?.[type];
-    if (!token) {
-      toast.error('Link nao configurado. Fale com o suporte.');
-      return;
-    }
-    const url = `${window.location.origin}/cadastro/${token}`;
+  async function copyUrl(url: string, label: string) {
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(`Link de cadastro (${type}) copiado!`);
+      toast.success(`Link ${label} copiado!`);
     } catch {
-      toast.error('Nao foi possivel copiar. Copie manualmente: ' + url);
+      toast.error('Nao foi possivel copiar: ' + url);
     }
   }
+
+  // Todos os links de cadastro para a equipe copiar e enviar.
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const cadastroLinks = [
+    { label: 'Aluno', url: `${origin}/cadastro-alunos` },
+    { label: 'Professor', url: `${origin}/cadastro-professor` },
+    { label: 'Coordenacao', url: `${origin}/cadastro-coordenacao` },
+    { label: 'Administrador', url: `${origin}/cadastro-administrador` },
+    ...(signupLinks?.matriculado
+      ? [{ label: 'Aluno matriculado (token)', url: `${origin}/cadastro/${signupLinks.matriculado}` }]
+      : []),
+    ...(signupLinks?.experimental
+      ? [
+          {
+            label: 'Aluno experimental (token)',
+            url: `${origin}/cadastro/${signupLinks.experimental}`,
+          },
+        ]
+      : []),
+  ];
 
   // Busca de leads no pipeline com debounce de 300ms. Leads ja matriculados
   // saem da lista — nao podem ser convertidos de novo.
@@ -395,6 +412,32 @@ export function AlunosPage() {
     }
   }
 
+  // Ajuste manual de saldo (+/-) na ficha. `sign` define somar ou subtrair.
+  async function handleAdjustCredits(sign: 1 | -1) {
+    if (!selected) return;
+    const amount = Math.abs(Number.parseInt(adjustAmount, 10) || 0);
+    if (amount < 1) {
+      setError('Informe uma quantidade de aulas valida.');
+      return;
+    }
+    setError('');
+    setInfo('');
+    setAdjustSaving(true);
+    try {
+      const response = await api<{ data: { creditBalance: number } }>(
+        `/api/students/${selected.id}/credits`,
+        { method: 'PATCH', body: JSON.stringify({ delta: sign * amount }) },
+      );
+      setInfo(`Saldo ajustado para ${response.data.creditBalance} aulas.`);
+      await openStudent(selected.id);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel ajustar o saldo.');
+    } finally {
+      setAdjustSaving(false);
+    }
+  }
+
   async function handleEditStudent(event: FormEvent) {
     event.preventDefault();
     if (!selected) return;
@@ -541,24 +584,14 @@ export function AlunosPage() {
           <h1>Perfil do aluno</h1>
         </div>
         <div className="row-actions">
-          {canOperate && signupLinks?.matriculado && (
+          {canOperate && (
             <button
               type="button"
               className="secondary-button"
-              onClick={() => void copySignupLink('matriculado')}
-              title="Copiar link publico de cadastro (matriculado)"
+              onClick={() => setShowLinks(true)}
+              title="Links publicos de cadastro para copiar e enviar"
             >
-              Copiar link · Matriculado
-            </button>
-          )}
-          {canOperate && signupLinks?.experimental && (
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => void copySignupLink('experimental')}
-              title="Copiar link publico de cadastro (experimental)"
-            >
-              Copiar link · Experimental
+              Links de cadastro
             </button>
           )}
           {canOperate && (
@@ -577,6 +610,31 @@ export function AlunosPage() {
           )}
         </div>
       </header>
+
+      {showLinks && (
+        <Modal title="Links de cadastro" onClose={() => setShowLinks(false)}>
+          <p className="muted-text">
+            Copie e envie o link do tipo desejado. A pessoa preenche o proprio cadastro.
+          </p>
+          <ul className="signup-links">
+            {cadastroLinks.map((link) => (
+              <li key={link.url}>
+                <div>
+                  <strong>{link.label}</strong>
+                  <span className="muted-text">{link.url}</span>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => void copyUrl(link.url, link.label)}
+                >
+                  Copiar
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
 
       {canCreate && showCreate && (
         <Modal title="Novo aluno" onClose={() => setShowCreate(false)}>
@@ -1117,6 +1175,41 @@ export function AlunosPage() {
                       </button>
                     </div>
                   </form>
+                </div>
+              )}
+
+              {activeTab === 'cadastro' && canOperate && (
+                <div>
+                  <h3>Ajustar saldo</h3>
+                  <p className="muted-text">
+                    Saldo atual: <strong>{selected.creditBalance}</strong> aulas. Some ou subtraia
+                    manualmente (registrado em auditoria).
+                  </p>
+                  <div className="credit-adjust">
+                    <input
+                      type="number"
+                      min={1}
+                      value={adjustAmount}
+                      onChange={(event) => setAdjustAmount(event.target.value)}
+                      aria-label="Quantidade de aulas"
+                    />
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={adjustSaving}
+                      onClick={() => void handleAdjustCredits(1)}
+                    >
+                      + Adicionar
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={adjustSaving}
+                      onClick={() => void handleAdjustCredits(-1)}
+                    >
+                      − Subtrair
+                    </button>
+                  </div>
                 </div>
               )}
 

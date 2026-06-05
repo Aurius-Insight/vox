@@ -183,12 +183,52 @@ router.get(
         id: student.id,
         name: student.name,
         cpf: student.cpfMasked ?? undefined,
+        whatsapp: student.whatsapp ?? undefined,
+        email: student.email ?? undefined,
         unit: student.unit?.name ?? null,
         packageName: student.packageName,
         aulasFeitas: attendances.length,
         aulasRestantes: student.creditBalance,
         porDisciplina,
         status: student.active ? 'ativo' : 'inativo',
+      },
+    });
+  }),
+);
+
+// O proprio aluno edita seus dados de contato (nome/whatsapp/email). Nao
+// mexe em tipo, saldo, CPF ou unidade.
+const UpdateMeSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  whatsapp: z.string().trim().min(8).max(30).optional(),
+  email: z
+    .string()
+    .trim()
+    .email()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+});
+
+router.patch(
+  '/me',
+  requirePortalStudent,
+  asyncHandler(async (req, res) => {
+    const input = UpdateMeSchema.parse(req.body);
+    const data: Prisma.StudentUpdateInput = {};
+    if (input.name !== undefined) data.name = input.name;
+    if (input.whatsapp !== undefined) data.whatsapp = input.whatsapp.replace(/\D/g, '');
+    if (input.email !== undefined) data.email = input.email ?? null;
+
+    const updated = await prisma.student.update({
+      where: { id: req.student!.id },
+      data,
+      select: { name: true, whatsapp: true, email: true },
+    });
+    res.json({
+      data: {
+        name: updated.name,
+        whatsapp: updated.whatsapp ?? undefined,
+        email: updated.email ?? undefined,
       },
     });
   }),
