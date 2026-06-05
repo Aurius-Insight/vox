@@ -7,10 +7,13 @@ import { Layout } from './components/Layout';
 import { ToastProvider } from './components/ToastProvider';
 import { firstAccessibleRoute } from './lib/navigation';
 import { AgendaPage } from './pages/AgendaPage';
+import { AjudaPage } from './pages/AjudaPage';
 import { AlunosPage } from './pages/AlunosPage';
+import { AtendimentoPage } from './pages/AtendimentoPage';
 import { ConfiguracoesPage } from './pages/ConfiguracoesPage';
 import { LeadsPage } from './pages/LeadsPage';
 import { LoginPage } from './pages/LoginPage';
+import { MateriasPage } from './pages/MateriasPage';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { PortalHomePage } from './pages/PortalHomePage';
 import { PortalLoginPage } from './pages/PortalLoginPage';
@@ -71,6 +74,10 @@ export default function App() {
                 <Route path="/vendas" element={<LeadsPage />} />
               </Route>
 
+              <Route element={<RequireAuth roles={['diretor', 'coordenacao', 'revisor']} />}>
+                <Route path="/atendimento" element={<AtendimentoPage />} />
+              </Route>
+
               <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
                 <Route path="/coordenacao" element={<AgendaPage />} />
               </Route>
@@ -94,8 +101,14 @@ export default function App() {
               </Route>
 
               <Route element={<RequireAuth roles={['diretor']} />}>
+                <Route path="/materias" element={<MateriasPage />} />
+              </Route>
+
+              <Route element={<RequireAuth roles={['diretor']} />}>
                 <Route path="/configuracoes" element={<ConfiguracoesPage />} />
               </Route>
+
+              <Route path="/ajuda" element={<AjudaPage />} />
             </Route>
           </Route>
         </Routes>

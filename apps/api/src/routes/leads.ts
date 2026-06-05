@@ -6,7 +6,7 @@ import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler, maskCpf, maskPhone, parsePagination } from '../lib/http.js';
 import { hashCpf, normalizeCpf } from '../lib/cpf.js';
-import { canConvertLead, uniqueEnrollmentCode } from '../domain/enrollment.js';
+import { canConvertLead, enrollmentStageSlug, uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
 import { leadSearchConditions } from '../domain/lead-search.js';
 import { getLeadStageBySlug } from '../lib/lead-stage-cache.js';
@@ -382,8 +382,7 @@ router.post(
       // Stage do lead acompanha o desfecho: matriculado sai do funil,
       // experimental fica em experimental_agendada (continua no pipeline
       // pra ser matriculado depois).
-      const nextSlug = input.type === 'matriculado' ? 'matriculado' : 'experimental_agendada';
-      const nextStage = await getLeadStageBySlug(nextSlug, tx);
+      const nextStage = await getLeadStageBySlug(enrollmentStageSlug(input.type), tx);
       const previousStageSlug = lead.stage.slug;
       const updatedLead = await tx.lead.update({
         where: { id: lead.id },

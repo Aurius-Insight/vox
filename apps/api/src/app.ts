@@ -19,6 +19,7 @@ import subjectsRouter from './routes/subjects.js';
 import unitsRouter from './routes/units.js';
 import usersRouter from './routes/users.js';
 import webhooksRouter from './routes/webhooks.js';
+import whatsappRouter from './routes/whatsapp.js';
 
 export function createApp() {
   const app = express();
@@ -28,7 +29,16 @@ export function createApp() {
   app.set('trust proxy', 1);
 
   applySecurity(app);
-  app.use(express.json({ limit: '256kb' }));
+  // `verify` guarda o corpo cru em `req.rawBody` — necessario para validar a
+  // assinatura HMAC do webhook do WhatsApp (`X-Hub-Signature-256`).
+  app.use(
+    express.json({
+      limit: '256kb',
+      verify: (req, _res, buf) => {
+        (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+      },
+    }),
+  );
   app.use(cookieParser());
   app.use(csrfGuard);
   app.use(attachUser);
@@ -50,6 +60,7 @@ export function createApp() {
   app.use('/api/packages', packagesRouter);
   app.use('/api/portal', portalRouter);
   app.use('/api/stages', stagesRouter);
+  app.use('/api/whatsapp', whatsappRouter);
   app.use('/api/webhooks', webhooksRouter);
 
   app.use(notFoundHandler);

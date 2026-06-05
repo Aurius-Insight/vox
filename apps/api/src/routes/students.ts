@@ -5,9 +5,10 @@ import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler, maskCpf, maskPhone } from '../lib/http.js';
 import { hashCpf, normalizeCpf } from '../lib/cpf.js';
-import { uniqueEnrollmentCode } from '../domain/enrollment.js';
+import { enrollmentStageSlug, uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
 import { withEnrollmentCodeRetry } from '../lib/enrollment-retry.js';
+import { getLeadStageBySlug } from '../lib/lead-stage-cache.js';
 import {
   buildStudentTimeline,
   computeStudentKpis,
@@ -191,6 +192,40 @@ router.post(
         tx.student.findUnique({ where: { enrollmentCode: code } }).then((found) => found !== null),
       );
 
+      // "Student manda": todo aluno nasce vinculado a um lead, ja na etapa do
+      // CRM que corresponde ao tipo (matriculado -> matriculado, experimental
+      // -> experimental_agendada). Sem isto o cadastro direto nascia fora do
+      // funil e nunca aparecia no Kanban. Reaproveita um lead existente do
+      // mesmo whatsapp que ainda nao virou aluno, em vez de duplicar.
+      const targetStage = await getLeadStageBySlug(enrollmentStageSlug(input.type), tx);
+      const reusableLead = whatsappDigits
+        ? await tx.lead.findFirst({
+            where: { whatsapp: whatsappDigits, student: { is: null } },
+            select: { id: true },
+          })
+        : null;
+      const leadId = reusableLead
+        ? (
+            await tx.lead.update({
+              where: { id: reusableLead.id },
+              data: { stageId: targetStage.id },
+              select: { id: true },
+            })
+          ).id
+        : (
+            await tx.lead.create({
+              data: {
+                name: input.name,
+                whatsapp: whatsappDigits,
+                email: input.email,
+                unitInterest: unit.name,
+                source: 'cadastro_direto',
+                stageId: targetStage.id,
+              },
+              select: { id: true },
+            })
+          ).id;
+
       const student = await tx.student.create({
         data: {
           name: input.name,
@@ -204,6 +239,7 @@ router.post(
           packageName,
           creditBalance,
           active: true,
+          leadId,
         },
         include: { unit: { select: { name: true } } },
       });
@@ -363,7 +399,10 @@ router.get(
         name: student.name,
         type: student.type,
         enrollmentCode: student.enrollmentCode,
-        whatsapp: maskPhone(student.whatsapp),
+        // WhatsApp sem mascara na FICHA do aluno: so diretor/coordenacao
+        // acessam esta tela e precisam do numero pra contatar. CPF segue
+        // mascarado (cpfMasked). Lista e demais respostas continuam mascaradas.
+        whatsapp: student.whatsapp,
         email: student.email ?? undefined,
         cpf: student.cpfMasked ?? undefined,
         unitId: student.unitId,
@@ -404,7 +443,9 @@ const HistoryQuerySchema = z.object({
   since: z.string().datetime().optional(),
 });
 
-const HISTORY_DEFAULT_WINDOW_DAYS = 90;
+// 730 dias (~2 anos): cobre o backfill historico das planilhas (aulas de
+// 2024/2025). A aba Historico pode pedir uma janela menor via `?since=`.
+const HISTORY_DEFAULT_WINDOW_DAYS = 730;
 const HISTORY_MAX_EVENTS_PER_TYPE = 500;
 
 // Historico individual do aluno: KPIs (janela configuravel, default 90 dias)

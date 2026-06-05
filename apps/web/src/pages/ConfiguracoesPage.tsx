@@ -6,13 +6,11 @@ import {
   ROLE_VALUES,
   type AppUser,
   type Package,
-  type Subject,
   type Unit,
 } from '../api/types';
 import { formatCents, formatDate, parseReaisToCents } from '../lib/format';
 import { Modal } from '../components/Modal';
 import { PipelineConfigPanel } from '../components/PipelineConfigPanel';
-import { SubjectsConfigPanel } from '../components/SubjectsConfigPanel';
 import { useToast } from '../components/ToastProvider';
 
 type PackageForm = {
@@ -44,7 +42,6 @@ const EMPTY_USER: UserForm = {
 export function ConfiguracoesPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [users, setUsers] = useState<AppUser[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [packageForm, setPackageForm] = useState<PackageForm>(EMPTY_PACKAGE);
   const [userForm, setUserForm] = useState<UserForm>(EMPTY_USER);
@@ -63,15 +60,13 @@ export function ConfiguracoesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [packageList, userList, subjectList, unitList] = await Promise.all([
+      const [packageList, userList, unitList] = await Promise.all([
         api<{ data: Package[] }>('/api/packages'),
         api<{ data: AppUser[] }>('/api/users'),
-        api<{ data: Subject[] }>('/api/subjects'),
         api<{ data: Unit[] }>('/api/units'),
       ]);
       setPackages(packageList.data);
       setUsers(userList.data);
-      setSubjects(subjectList.data);
       setUnits(unitList.data.filter((item) => item.active));
     } catch {
       setError('Nao foi possivel carregar as configuracoes.');
@@ -414,7 +409,7 @@ export function ConfiguracoesPage() {
         <Modal title="Novo usuario" onClose={() => setShowUserForm(false)}>
           <p className="muted-text">
           Defina a senha inicial e repasse ao usuario. Use os papeis para liberar o acesso de cada
-          area (professor enxerga apenas as proprias aulas).
+          area. Professores sao cadastrados na pagina Professores.
         </p>
         <form className="grid-form" onSubmit={handleCreateUser}>
           <label>
@@ -445,7 +440,9 @@ export function ConfiguracoesPage() {
             />
           </label>
           <div className="role-options">
-            {ROLE_VALUES.map((role) => (
+            {/* Professor sai daqui: cadastro de professor vive na pagina Professores
+                (com materia, edicao e troca de senha). Aqui so equipe administrativa. */}
+            {ROLE_VALUES.filter((role) => role !== 'professor').map((role) => (
               <label key={role}>
                 <input
                   type="checkbox"
@@ -456,23 +453,6 @@ export function ConfiguracoesPage() {
               </label>
             ))}
           </div>
-          {userForm.roles.includes('professor') && (
-            <label>
-              Materia do professor
-              <select
-                value={userForm.subjectId}
-                onChange={(event) => updateUserField('subjectId', event.target.value)}
-                required
-              >
-                <option value="">Selecione</option>
-                {subjects.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           <label>
             Unidade (opcional)
             <select
@@ -549,7 +529,6 @@ export function ConfiguracoesPage() {
         </table>
       </section>
 
-      <SubjectsConfigPanel />
       <PipelineConfigPanel />
     </main>
   );

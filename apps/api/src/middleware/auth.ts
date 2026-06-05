@@ -28,6 +28,8 @@ declare global {
 const SESSION_COOKIE = 'vox_session';
 const PORTAL_COOKIE = 'vox_portal_session';
 const PORTAL_COOKIE_PATH = '/api/portal';
+// Sessao do staff: 8h DESLIZANTES (renovadas a cada request em attachUser).
+// Conta inatividade — uso ativo nunca desloga; 8h parado expira.
 const SESSION_TTL_MS = 8 * 60 * 60_000;
 // Sessao do portal do aluno: 90 dias, deslizante (renovada a cada uso em
 // attachPortalStudent). Aluno ativo atravessa o pacote inteiro sem link novo.
@@ -100,7 +102,7 @@ export async function clearPortalSession(req: Request, res: Response) {
   res.clearCookie(PORTAL_COOKIE, { path: PORTAL_COOKIE_PATH });
 }
 
-export const attachUser: RequestHandler = async (req, _res, next) => {
+export const attachUser: RequestHandler = async (req, res, next) => {
   try {
     const sessionId = req.cookies?.[SESSION_COOKIE];
     if (!sessionId) return next();
@@ -109,7 +111,14 @@ export const attachUser: RequestHandler = async (req, _res, next) => {
     if (!userId) return next();
 
     const user = await publicUser(userId);
-    if (user) req.user = user;
+    if (user) {
+      req.user = user;
+      // Sessao deslizante: cada requisicao autenticada renova o prazo no
+      // Redis e no cookie, igual ao portal do aluno. As 8h passam a contar
+      // de INATIVIDADE — quem esta trabalhando nao cai no meio do expediente.
+      await redis.set(userSessionKey(sessionId), userId, SESSION_TTL_SECONDS);
+      setUserSessionCookie(res, sessionId);
+    }
     return next();
   } catch (error) {
     return next(error);

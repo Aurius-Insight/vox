@@ -35,16 +35,15 @@ jobs:
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://vox:vox@localhost:5432/vox_mvp
+      # prisma.config.ts exige DIRECT_URL (migrations/introspect). Em CI bate
+      # no mesmo Postgres do DATABASE_URL.
+      DIRECT_URL: postgresql://vox:vox@localhost:5432/vox_mvp
       REDIS_URL: redis://localhost:6379
       APP_ORIGIN: http://localhost:5173
       SESSION_SECRET: ci-session-secret-with-at-least-32-chars
       WEBHOOK_SECRET: ci-webhook-secret-with-24-chars
       ADMIN_EMAIL: admin@voxrj.com
       ADMIN_PASSWORD: admin-dev-password
-
-    defaults:
-      run:
-        working-directory: MVP
 
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +52,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: MVP/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
         run: npm ci

@@ -98,19 +98,37 @@ export function AlunosPage() {
   const [search, setSearch] = useState('');
   const [unitFilter, setUnitFilter] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<'todos' | 'matriculado' | 'experimental'>('todos');
+  // Faixas de saldo restante (creditBalance) e ordenacao da lista.
+  const [saldoFilter, setSaldoFilter] = useState<'todos' | 'sem' | 'baixo' | 'medio' | 'alto'>(
+    'todos',
+  );
+  const [sortOrder, setSortOrder] = useState<'nome' | 'saldo_desc' | 'saldo_asc'>('nome');
 
   const visibleStudents = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return students.filter((student) => {
+    const filtered = students.filter((student) => {
       if (typeFilter !== 'todos' && student.type !== typeFilter) return false;
       if (unitFilter && student.unitId !== unitFilter) return false;
+      if (saldoFilter !== 'todos') {
+        const saldo = student.creditBalance;
+        if (saldoFilter === 'sem' && saldo !== 0) return false;
+        if (saldoFilter === 'baixo' && !(saldo >= 1 && saldo <= 4)) return false;
+        if (saldoFilter === 'medio' && !(saldo >= 5 && saldo <= 9)) return false;
+        if (saldoFilter === 'alto' && saldo < 10) return false;
+      }
       if (query) {
         const haystack = `${student.name} ${student.enrollmentCode}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       return true;
     });
-  }, [students, search, unitFilter, typeFilter]);
+    // Ordenacao (nao muta o array original).
+    const sorted = [...filtered];
+    if (sortOrder === 'saldo_desc') sorted.sort((a, b) => b.creditBalance - a.creditBalance);
+    else if (sortOrder === 'saldo_asc') sorted.sort((a, b) => a.creditBalance - b.creditBalance);
+    else sorted.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    return sorted;
+  }, [students, search, unitFilter, typeFilter, saldoFilter, sortOrder]);
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
@@ -766,6 +784,28 @@ export function AlunosPage() {
           <option value="matriculado">Matriculado</option>
           <option value="experimental">Experimental</option>
         </select>
+        <select
+          className="filter-bar-select"
+          value={saldoFilter}
+          onChange={(event) => setSaldoFilter(event.target.value as typeof saldoFilter)}
+          aria-label="Filtrar por saldo restante"
+        >
+          <option value="todos">Todos os saldos</option>
+          <option value="sem">Sem saldo (0)</option>
+          <option value="baixo">Saldo baixo (1–4)</option>
+          <option value="medio">Saldo medio (5–9)</option>
+          <option value="alto">Saldo alto (10+)</option>
+        </select>
+        <select
+          className="filter-bar-select"
+          value={sortOrder}
+          onChange={(event) => setSortOrder(event.target.value as typeof sortOrder)}
+          aria-label="Ordenar lista"
+        >
+          <option value="nome">Ordem: Nome (A–Z)</option>
+          <option value="saldo_desc">Saldo: maior → menor</option>
+          <option value="saldo_asc">Saldo: menor → maior</option>
+        </select>
         <span className="filter-bar-count">
           {visibleStudents.length === students.length
             ? `${students.length} alunos`
@@ -775,7 +815,7 @@ export function AlunosPage() {
 
       <div className={selected ? 'split-grid' : 'split-grid split-grid-collapsed'}>
         <section className="table-card">
-          <table>
+          <table className="cards-table">
             <thead>
               <tr>
                 <th>Aluno</th>
@@ -801,15 +841,15 @@ export function AlunosPage() {
                   className={selected?.id === student.id ? 'row-selected' : undefined}
                   onClick={() => void openStudent(student.id)}
                 >
-                  <td>{highlightMatch(student.name, search)}</td>
-                  <td>
+                  <td data-label="Aluno">{highlightMatch(student.name, search)}</td>
+                  <td data-label="Tipo">
                     <span className="status-chip">
                       {student.type === 'experimental' ? 'Experimental' : 'Matriculado'}
                     </span>
                   </td>
-                  <td>{highlightMatch(student.enrollmentCode, search)}</td>
-                  <td>{student.unitName ?? '-'}</td>
-                  <td>{student.creditBalance}</td>
+                  <td data-label="Matricula">{highlightMatch(student.enrollmentCode, search)}</td>
+                  <td data-label="Escola">{student.unitName ?? '-'}</td>
+                  <td data-label="Saldo">{student.creditBalance}</td>
                 </tr>
               ))}
             </tbody>
