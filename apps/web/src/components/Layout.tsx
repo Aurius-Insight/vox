@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   BookOpen,
@@ -20,8 +20,8 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useAuth } from '../auth/AuthProvider';
-import { navItemsForRoles } from '../lib/navigation';
+import { useAuth, type Role } from '../auth/AuthProvider';
+import { firstAccessibleRoute, navItemsForRoles } from '../lib/navigation';
 import { ThemeToggle } from './ThemeToggle';
 
 // Icone de cada item do menu, por rota.
@@ -48,11 +48,22 @@ function readCollapsed(): boolean {
   }
 }
 
+const VIEW_AS_ROLES: { value: Role; label: string }[] = [
+  { value: 'diretor', label: 'Diretor (voce)' },
+  { value: 'coordenacao', label: 'Coordenacao' },
+  { value: 'professor', label: 'Professor' },
+];
+
 export function Layout() {
   const auth = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const roles = auth.user?.roles ?? [];
-  const items = navItemsForRoles(roles);
+  const isDiretor = roles.includes('diretor');
+  // "Ver como": o diretor pode enxergar o menu como cada papel (so visual —
+  // o backend mantem as permissoes reais). null = visao real.
+  const [viewAs, setViewAs] = useState<Role | null>(null);
+  const items = navItemsForRoles(viewAs ? [viewAs] : roles);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   // Drawer do menu no mobile (off-canvas). No desktop o sidebar e fixo.
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -140,9 +151,32 @@ export function Layout() {
         </nav>
 
         <div className="app-user">
+          {isDiretor && (
+            <label className="view-as sidebar-label">
+              Ver como
+              <select
+                value={viewAs ?? 'diretor'}
+                onChange={(event) => {
+                  const role = event.target.value as Role;
+                  const next = role === 'diretor' ? null : role;
+                  setViewAs(next);
+                  setDrawerOpen(false);
+                  navigate(firstAccessibleRoute(next ? [next] : roles));
+                }}
+              >
+                {VIEW_AS_ROLES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="app-user-info sidebar-label">
             <strong>{auth.user?.name ?? 'Usuario'}</strong>
-            <span>{roles.join(', ') || 'sem papel'}</span>
+            <span>
+              {viewAs ? `vendo como ${viewAs}` : roles.join(', ') || 'sem papel'}
+            </span>
           </div>
           <ThemeToggle />
           <button

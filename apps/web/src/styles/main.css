@@ -1049,6 +1049,23 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+/* Seletor "Ver como" no rodape do sidebar (so diretor). */
+.view-as {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.view-as select {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+
 /* Paginacao da lista (Anterior / Pagina X de Y / Proxima). */
 .pagination {
   display: flex;
