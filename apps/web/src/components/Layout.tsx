@@ -16,6 +16,7 @@ import {
   Presentation,
   Settings,
   TrendingUp,
+  UserCircle,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -35,6 +36,7 @@ const NAV_ICONS: Record<string, LucideIcon> = {
   '/unidades': Building2,
   '/materias': BookOpen,
   '/configuracoes': Settings,
+  '/perfil': UserCircle,
   '/ajuda': LifeBuoy,
 };
 

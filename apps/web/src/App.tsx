@@ -17,6 +17,7 @@ import { MateriasPage } from './pages/MateriasPage';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { PortalHomePage } from './pages/PortalHomePage';
 import { PortalLoginPage } from './pages/PortalLoginPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { PublicSignupPage } from './pages/PublicSignupPage';
 import { PresencaPage } from './pages/PresencaPage';
 import { ProfessoresPage } from './pages/ProfessoresPage';
@@ -110,6 +111,7 @@ export default function App() {
                 <Route path="/configuracoes" element={<ConfiguracoesPage />} />
               </Route>
 
+              <Route path="/perfil" element={<ProfilePage />} />
               <Route path="/ajuda" element={<AjudaPage />} />
             </Route>
           </Route>

@@ -57,6 +57,34 @@ router.get('/me', requireAuth, (req, res) => {
   res.json({ user: req.user });
 });
 
+// O proprio usuario (professor, coordenacao, diretor) edita seus dados: nome
+// e senha. E-mail (login) e papeis nao sao editaveis aqui.
+const UpdateMeSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  password: z.string().min(12).max(200).optional(),
+});
+
+router.patch(
+  '/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const input = UpdateMeSchema.parse(req.body);
+    const data: { name?: string; passwordHash?: string } = {};
+    if (input.name !== undefined) data.name = input.name;
+    if (input.password !== undefined) data.passwordHash = await bcrypt.hash(input.password, 12);
+    if (Object.keys(data).length === 0) {
+      throw new ApiError(400, 'no_changes', 'Nada para atualizar.');
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.user!.id },
+      data,
+      select: { id: true, email: true, name: true, roles: true, unitId: true },
+    });
+    res.json({ user: updated });
+  }),
+);
+
 router.post(
   '/logout',
   requireAuth,

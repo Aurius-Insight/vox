@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ApiClientError, api } from '../api/client';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -10,6 +10,8 @@ type DisciplinaResumo = {
 
 type PortalStudent = {
   name: string;
+  whatsapp?: string;
+  email?: string;
   unit: string | null;
   packageName: string;
   aulasFeitas: number;
@@ -61,6 +63,9 @@ export function PortalHomePage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [flash, setFlash] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', whatsapp: '', email: '' });
 
   const load = useCallback(async () => {
     try {
@@ -133,6 +138,43 @@ export function PortalHomePage() {
     }
   }
 
+  function openEdit() {
+    setEditForm({
+      name: student?.name ?? '',
+      whatsapp: student?.whatsapp ?? '',
+      email: student?.email ?? '',
+    });
+    setEditOpen(true);
+  }
+
+  async function handleSaveProfile(event: FormEvent) {
+    event.preventDefault();
+    setError('');
+    setFlash('');
+    if (editForm.name.trim().length < 2) {
+      setError('Informe seu nome.');
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await api('/api/portal/me', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          whatsapp: editForm.whatsapp.trim() || undefined,
+          email: editForm.email.trim() || undefined,
+        }),
+      });
+      setEditOpen(false);
+      setFlash('Dados atualizados!');
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel salvar.');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   async function handleLogout() {
     try {
       await api('/api/portal/logout', { method: 'POST' });
@@ -152,6 +194,9 @@ export function PortalHomePage() {
           <h1>Ola, {student?.name ?? 'aluno'}</h1>
         </div>
         <div className="row-actions">
+          <button type="button" className="secondary-button" onClick={openEdit}>
+            Editar dados
+          </button>
           <ThemeToggle />
           <button type="button" className="secondary-button" onClick={() => void handleLogout()}>
             Sair
@@ -161,6 +206,52 @@ export function PortalHomePage() {
 
       {error && <p className="form-error">{error}</p>}
       {flash && <p className="form-success">{flash}</p>}
+
+      {editOpen && (
+        <section className="portal-section">
+          <div className="section-title">
+            <h2>Meus dados</h2>
+          </div>
+          <form className="grid-form" onSubmit={handleSaveProfile}>
+            <label>
+              Nome
+              <input
+                value={editForm.name}
+                onChange={(event) => setEditForm((c) => ({ ...c, name: event.target.value }))}
+                autoFocus
+              />
+            </label>
+            <label>
+              WhatsApp
+              <input
+                value={editForm.whatsapp}
+                onChange={(event) => setEditForm((c) => ({ ...c, whatsapp: event.target.value }))}
+                inputMode="tel"
+              />
+            </label>
+            <label>
+              E-mail
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={(event) => setEditForm((c) => ({ ...c, email: event.target.value }))}
+              />
+            </label>
+            <div className="grid-form-actions">
+              <button type="submit" disabled={editSaving}>
+                {editSaving ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setEditOpen(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
 
       <section className="portal-top-grid">
         <div className="portal-hero">

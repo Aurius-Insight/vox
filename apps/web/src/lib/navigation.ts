@@ -24,6 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/unidades', label: 'Escolas', roles: ['diretor', 'coordenacao'] },
   { to: '/materias', label: 'Materias', roles: ['diretor'] },
   { to: '/configuracoes', label: 'Configuracoes', roles: ['diretor'] },
+  { to: '/perfil', label: 'Meu perfil', roles: ['diretor', 'coordenacao', 'professor'] },
   { to: '/ajuda', label: 'Ajuda', roles: ['diretor', 'coordenacao', 'professor'] },
 ];
 
