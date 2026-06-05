@@ -13,6 +13,7 @@ import healthRouter from './routes/health.js';
 import leadsRouter from './routes/leads.js';
 import packagesRouter from './routes/packages.js';
 import portalRouter from './routes/portal.js';
+import publicRouter from './routes/public.js';
 import stagesRouter from './routes/stages.js';
 import studentsRouter from './routes/students.js';
 import subjectsRouter from './routes/subjects.js';
@@ -59,6 +60,7 @@ export function createApp() {
   app.use('/api/units', unitsRouter);
   app.use('/api/packages', packagesRouter);
   app.use('/api/portal', portalRouter);
+  app.use('/api/public', publicRouter);
   app.use('/api/stages', stagesRouter);
   app.use('/api/whatsapp', whatsappRouter);
   app.use('/api/webhooks', webhooksRouter);
