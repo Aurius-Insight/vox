@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api, ApiClientError } from '../api/client';
 
 type Unit = { id: string; name: string };
@@ -19,6 +19,7 @@ const EMPTY: SignupForm = { name: '', whatsapp: '', unitId: '', email: '', cpf: 
 // proprio cadastro. O token (na URL) define o tipo de aluno no backend.
 export function PublicSignupPage() {
   const { token } = useParams();
+  const navigate = useNavigate();
   const [info, setInfo] = useState<SignupInfo>();
   const [invalid, setInvalid] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -64,19 +65,31 @@ export function PublicSignupPage() {
       setError('Selecione a unidade.');
       return;
     }
+    if (form.cpf.length !== 11) {
+      setError('Informe seu CPF (11 digitos).');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      await api(`/api/public/signup/${token}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: form.name.trim(),
-          whatsapp: form.whatsapp,
-          unitId: form.unitId,
-          email: form.email.trim() || undefined,
-          cpf: form.cpf.replace(/\D/g, '') || undefined,
-        }),
-      });
+      const response = await api<{ data: { ok: boolean; portal: boolean } }>(
+        `/api/public/signup/${token}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: form.name.trim(),
+            whatsapp: form.whatsapp,
+            unitId: form.unitId,
+            email: form.email.trim() || undefined,
+            cpf: form.cpf,
+          }),
+        },
+      );
+      // Matriculado ja entra logado no portal: cai direto na selecao de aulas.
+      if (response.data.portal) {
+        navigate('/portal', { replace: true });
+        return;
+      }
       setDone(true);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'Nao foi possivel enviar agora.');
@@ -181,12 +194,13 @@ export function PublicSignupPage() {
         </label>
 
         <label>
-          CPF (opcional)
+          CPF
           <input
             value={form.cpf}
             onChange={(event) => update('cpf', event.target.value.replace(/\D/g, '').slice(0, 11))}
-            placeholder="Somente numeros"
+            placeholder="Somente numeros (usado para acessar suas aulas)"
             inputMode="numeric"
+            maxLength={11}
           />
         </label>
 

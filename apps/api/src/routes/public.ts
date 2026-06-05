@@ -8,7 +8,12 @@ import { enrollmentStageSlug, uniqueEnrollmentCode } from '../domain/enrollment.
 import { getLeadStageBySlug } from '../lib/lead-stage-cache.js';
 import { withEnrollmentCodeRetry } from '../lib/enrollment-retry.js';
 import { rateLimit } from '../middleware/rateLimit.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import {
+  createPortalSession,
+  requireAuth,
+  requireRole,
+  setPortalSessionCookie,
+} from '../middleware/auth.js';
 
 const router = Router();
 
@@ -45,11 +50,9 @@ const SignupSchema = z.object({
     .email()
     .optional()
     .or(z.literal('').transform(() => undefined)),
-  cpf: z
-    .string()
-    .optional()
-    .transform((v) => (v && v.trim().length > 0 ? v : undefined))
-    .pipe(z.string().min(11).max(14).optional()),
+  // CPF obrigatorio: e o login do portal (o aluno cai direto na selecao de
+  // aulas apos cadastrar e volta depois pelo /portal/entrar com o CPF).
+  cpf: z.string().trim().min(11).max(14),
 });
 
 // Valida o token e devolve o tipo + unidades ativas para montar o formulario.
@@ -81,12 +84,9 @@ router.post(
     const input = SignupSchema.parse(req.body);
     const whatsappDigits = input.whatsapp.replace(/\D/g, '');
 
-    let cpfDigits: string | null = null;
-    if (input.cpf) {
-      cpfDigits = normalizeCpf(input.cpf);
-      if (cpfDigits.length !== 11) {
-        throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
-      }
+    const cpfDigits = normalizeCpf(input.cpf);
+    if (cpfDigits.length !== 11) {
+      throw new ApiError(400, 'invalid_cpf', 'CPF deve ter 11 digitos.');
     }
 
     const result = await withEnrollmentCodeRetry(() =>
@@ -102,14 +102,10 @@ router.post(
         });
         if (existing) return { ok: true as const, duplicate: true as const };
 
-        let cpfHashValue: string | null = null;
-        let cpfMaskedValue: string | null = null;
-        if (cpfDigits) {
-          cpfHashValue = hashCpf(cpfDigits);
-          const byCpf = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
-          if (byCpf) return { ok: true as const, duplicate: true as const };
-          cpfMaskedValue = maskCpf(cpfDigits) ?? null;
-        }
+        const cpfHashValue = hashCpf(cpfDigits);
+        const byCpf = await tx.student.findFirst({ where: { cpfHash: cpfHashValue } });
+        if (byCpf) return { ok: true as const, duplicate: true as const };
+        const cpfMaskedValue = maskCpf(cpfDigits) ?? null;
 
         // Matriculado entra com o pacote padrao (saldo cheio); experimental sem.
         let packageName: string | null = null;
@@ -186,14 +182,25 @@ router.post(
           },
         });
 
-        return { ok: true as const, duplicate: false as const };
+        return { ok: true as const, duplicate: false as const, studentId: student.id };
       }),
     );
 
     if (!result.ok) {
       throw new ApiError(404, 'unit_not_found', 'Unidade nao encontrada.');
     }
-    res.status(201).json({ data: { ok: true } });
+
+    // Matriculado recem-criado cai direto na selecao de aulas: cria a sessao de
+    // portal (login automatico) e o front redireciona pra /portal. Experimental
+    // e duplicados ficam na confirmacao — o portal e exclusivo de matriculado e
+    // o trial do experimental e agendado pela equipe.
+    let portal = false;
+    if (!result.duplicate && tipo === 'matriculado') {
+      const sessionId = await createPortalSession(result.studentId);
+      setPortalSessionCookie(res, sessionId);
+      portal = true;
+    }
+    res.status(201).json({ data: { ok: true, portal } });
   }),
 );
 
