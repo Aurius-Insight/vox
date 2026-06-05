@@ -22,7 +22,9 @@ import {
 } from 'lucide-react';
 import { useAuth, type Role } from '../auth/AuthProvider';
 import { firstAccessibleRoute, navItemsForRoles } from '../lib/navigation';
+import { api } from '../api/client';
 import { ThemeToggle } from './ThemeToggle';
+import { useToast } from './ToastProvider';
 
 // Icone de cada item do menu, por rota.
 const NAV_ICONS: Record<string, LucideIcon> = {
@@ -58,6 +60,7 @@ export function Layout() {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const toast = useToast();
   const roles = auth.user?.roles ?? [];
   const isDiretor = roles.includes('diretor');
   // "Ver como": o diretor pode enxergar o menu como cada papel (so visual —
@@ -157,7 +160,26 @@ export function Layout() {
               <select
                 value={viewAs ?? 'diretor'}
                 onChange={(event) => {
-                  const role = event.target.value as Role;
+                  const value = event.target.value;
+                  // Aluno e o PORTAL (area separada): abre uma previa em nova
+                  // aba via sessao de portal de um aluno de exemplo.
+                  if (value === 'aluno') {
+                    const previewTab = window.open('', '_blank');
+                    api<{ data: { studentName: string } }>('/api/portal/preview', {
+                      method: 'POST',
+                    })
+                      .then((response) => {
+                        toast.success(`Previa do portal como ${response.data.studentName}.`);
+                        if (previewTab) previewTab.location.href = '/portal';
+                        else window.open('/portal', '_blank', 'noopener');
+                      })
+                      .catch(() => {
+                        if (previewTab) previewTab.close();
+                        toast.error('Nao foi possivel abrir a previa do portal.');
+                      });
+                    return;
+                  }
+                  const role = value as Role;
                   const next = role === 'diretor' ? null : role;
                   setViewAs(next);
                   setDrawerOpen(false);
@@ -169,6 +191,7 @@ export function Layout() {
                     {option.label}
                   </option>
                 ))}
+                <option value="aluno">Aluno (portal)</option>
               </select>
             </label>
           )}

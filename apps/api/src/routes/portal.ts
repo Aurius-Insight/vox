@@ -6,7 +6,9 @@ import { prisma } from '../db/client.js';
 import {
   clearPortalSession,
   createPortalSession,
+  requireAuth,
   requirePortalStudent,
+  requireRole,
   setPortalSessionCookie,
 } from '../middleware/auth.js';
 import { portalLimiter } from '../middleware/rateLimit.js';
@@ -142,6 +144,40 @@ router.post(
   asyncHandler(async (req, res) => {
     await clearPortalSession(req, res);
     res.status(204).send();
+  }),
+);
+
+// "Ver como Aluno" do diretor: cria uma sessao de portal de um aluno de
+// exemplo (primeiro matriculado ativo) para o diretor pre-visualizar o portal.
+// So diretor; auditado. O portal so funciona para matriculado.
+router.post(
+  '/preview',
+  requireAuth,
+  requireRole('diretor'),
+  asyncHandler(async (req, res) => {
+    const student = await prisma.student.findFirst({
+      where: { active: true, type: 'matriculado' },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+    if (!student) {
+      throw new ApiError(404, 'no_student', 'Nenhum aluno matriculado para pre-visualizar.');
+    }
+
+    const sessionId = await createPortalSession(student.id);
+    setPortalSessionCookie(res, sessionId);
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: req.user!.id,
+        actorType: 'user',
+        entityType: 'student',
+        entityId: student.id,
+        action: 'portal.preview_opened',
+        after: { studentName: student.name },
+      },
+    });
+    res.json({ data: { studentName: student.name } });
   }),
 );
 
