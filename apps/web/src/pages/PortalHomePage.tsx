@@ -59,6 +59,8 @@ export function PortalHomePage() {
   const [unauthenticated, setUnauthenticated] = useState(false);
   const [pendingId, setPendingId] = useState<string>();
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [flash, setFlash] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -74,6 +76,8 @@ export function PortalHomePage() {
         return;
       }
       setError('Nao foi possivel carregar seus dados agora.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -106,12 +110,14 @@ export function PortalHomePage() {
   async function handleBooking(item: PortalClass) {
     setPendingId(item.id);
     setError('');
+    setFlash('');
 
     try {
       await api(`/api/portal/classes/${item.id}/book`, {
         method: item.isBooked ? 'DELETE' : 'POST',
       });
       await load();
+      setFlash(item.isBooked ? 'Reserva cancelada.' : 'Aula confirmada! ✓');
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.status === 401) {
@@ -154,6 +160,7 @@ export function PortalHomePage() {
       </header>
 
       {error && <p className="form-error">{error}</p>}
+      {flash && <p className="form-success">{flash}</p>}
 
       <section className="portal-top-grid">
         <div className="portal-hero">
@@ -169,33 +176,21 @@ export function PortalHomePage() {
             <span>Aulas restantes</span>
             <span>Vox Rio</span>
           </div>
-          <div className="credit-panel-value">
-            <strong>{String(student?.aulasRestantes ?? '-').padStart(2, '0')}</strong>
+          <div
+            className="credit-panel-value"
+            data-tone={student?.aulasRestantes === 0 ? 'alert' : undefined}
+          >
+            <strong>{student ? String(student.aulasRestantes).padStart(2, '0') : '—'}</strong>
             <span>aulas</span>
           </div>
           <p className="credit-panel-note">
-            {student ? `${student.aulasFeitas} aulas feitas - ${student.packageName}` : 'Pacote ativo'}
+            {!student
+              ? 'Carregando...'
+              : student.aulasRestantes === 0
+                ? 'Sem aulas no pacote - fale com o atendimento'
+                : `${student.aulasFeitas} aulas feitas - ${student.packageName}`}
           </p>
         </aside>
-      </section>
-
-      <section className="portal-section">
-        <div className="section-title">
-          <h2>Minhas disciplinas</h2>
-        </div>
-        {student && student.porDisciplina.length === 0 && (
-          <p className="empty-state">Nenhuma aula registrada ainda.</p>
-        )}
-        <ul className="history-list">
-          {student?.porDisciplina.map((item) => (
-            <li key={item.disciplina}>
-              <span>{item.disciplina}</span>
-              <span>
-                {item.quantidade} {item.quantidade === 1 ? 'aula feita' : 'aulas feitas'}
-              </span>
-            </li>
-          ))}
-        </ul>
       </section>
 
       <section className="portal-section">
@@ -251,7 +246,10 @@ export function PortalHomePage() {
 
         {tab === 'proximas' && (
         <div className="class-list">
-          {classes.length === 0 && <p className="empty-state">Nenhuma aula disponivel no momento.</p>}
+          {loading && <p className="empty-state">Carregando aulas...</p>}
+          {!loading && classes.length === 0 && (
+            <p className="empty-state">Nenhuma aula disponivel no momento.</p>
+          )}
           {classes.map((item) => {
             const isPending = pendingId === item.id;
             const actionDisabled = isPending || (!item.isBooked && !item.canBook);
@@ -289,6 +287,25 @@ export function PortalHomePage() {
           })}
         </div>
         )}
+      </section>
+
+      <section className="portal-section">
+        <div className="section-title">
+          <h2>Minhas disciplinas</h2>
+        </div>
+        {student && student.porDisciplina.length === 0 && (
+          <p className="empty-state">Nenhuma aula registrada ainda.</p>
+        )}
+        <ul className="history-list">
+          {student?.porDisciplina.map((item) => (
+            <li key={item.disciplina}>
+              <span>{item.disciplina}</span>
+              <span>
+                {item.quantidade} {item.quantidade === 1 ? 'aula feita' : 'aulas feitas'}
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
     </main>
   );

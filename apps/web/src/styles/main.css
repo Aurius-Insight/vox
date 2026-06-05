@@ -391,6 +391,11 @@ tbody tr:last-child td {
   color: #f59e0b;
 }
 
+/* Saldo zerado no portal do aluno: destaca em vermelho. */
+.credit-panel-value[data-tone='alert'] strong {
+  color: #ef4444;
+}
+
 /* Estrutura por secao no dashboard: titulo + grade de cards. */
 .dashboard-section {
   display: grid;
@@ -470,6 +475,13 @@ tbody tr:last-child td {
   color: var(--error);
   font-size: 0.9rem;
   font-weight: 500;
+  margin: 0;
+}
+
+.form-success {
+  color: #16a34a;
+  font-size: 0.9rem;
+  font-weight: 600;
   margin: 0;
 }
 
@@ -889,7 +901,7 @@ tbody tr:last-child td {
   display: grid;
   gap: 0.75rem;
   margin-top: auto;
-  padding: 1.1rem 0.5rem 0.25rem;
+  padding: 1.1rem 0.5rem max(0.25rem, env(safe-area-inset-bottom));
 }
 
 .app-user-info {
@@ -1005,8 +1017,8 @@ tbody tr:last-child td {
 }
 
 .row-actions button {
-  min-height: 34px;
-  padding: 0.35rem 0.8rem;
+  min-height: 40px;
+  padding: 0.45rem 0.8rem;
 }
 
 .app-page a {
@@ -1224,7 +1236,8 @@ tr.row-selected {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.55rem 0.9rem;
+    padding: max(0.55rem, env(safe-area-inset-top)) max(0.9rem, env(safe-area-inset-right)) 0.55rem
+      max(0.9rem, env(safe-area-inset-left));
     background: var(--sidebar-bg);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     backdrop-filter: blur(20px) saturate(180%);
@@ -1260,6 +1273,7 @@ tr.row-selected {
     transform: translateX(-100%);
     transition: transform var(--motion-base) var(--ease-out);
     overflow-y: auto;
+    padding-top: max(1.6rem, env(safe-area-inset-top));
   }
 
   .app-shell[data-drawer='true'] .app-sidebar {
@@ -1770,7 +1784,8 @@ tr.row-selected {
    --------------------------------------------------------------------------- */
 @media (max-width: 640px) {
   .app-page {
-    padding: 1rem 0.85rem;
+    padding: 1rem max(0.85rem, env(safe-area-inset-right))
+      max(1rem, env(safe-area-inset-bottom)) max(0.85rem, env(safe-area-inset-left));
     gap: 1.2rem;
   }
 
@@ -1838,6 +1853,35 @@ tr.row-selected {
   }
   .cards-table td[data-label='Acoes'] {
     justify-content: flex-end;
+  }
+
+  /* Coluna "Chamada" da Presença (botoes Presente/Falta): sem rotulo, botoes
+     grandes ocupando a largura do cartao — facil de marcar com o polegar. */
+  .cards-table td[data-label='Chamada']::before {
+    display: none;
+  }
+  .cards-table td[data-label='Chamada'] {
+    justify-content: flex-end;
+  }
+  .cards-table td[data-label='Chamada'] .row-actions {
+    width: 100%;
+  }
+  .cards-table td[data-label='Chamada'] .row-actions button {
+    flex: 1;
+  }
+
+  /* Chips de status (tipo do aluno, X/Y agendados) legiveis no celular. */
+  .status-chip {
+    font-size: 0.8rem;
+  }
+
+  /* Abas do portal (Proximas/Historico) com alvo de toque pleno e espacadas. */
+  .detail-tabs {
+    gap: 8px;
+  }
+  .detail-tabs button {
+    min-height: 44px;
+    padding: 10px 16px;
   }
 
   /* Cabeçalho de tabela (titulo + acao) empilha */

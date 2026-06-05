@@ -4,6 +4,7 @@ import type { ClassSession, StudentType } from '../api/types';
 import { formatDateTime } from '../lib/format';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/ToastProvider';
+import { useAuth } from '../auth/AuthProvider';
 
 type AttendanceResponse = {
   data: {
@@ -25,6 +26,7 @@ type StudentResult = {
 type ClassBucket = 'hoje' | 'proximas' | 'historico';
 
 export function PresencaPage() {
+  const auth = useAuth();
   const [classes, setClasses] = useState<ClassSession[]>([]);
   const [pendingKey, setPendingKey] = useState<string>();
   const [addingTo, setAddingTo] = useState<ClassSession>();
@@ -169,11 +171,17 @@ export function PresencaPage() {
       )
     : [];
 
+  // O professor tambem usa esta tela; "Coordenacao" confundiria. Mostra o
+  // papel certo quando o usuario e so professor.
+  const isProfessorOnly =
+    auth.user?.roles.includes('professor') &&
+    !auth.user.roles.some((role) => role === 'diretor' || role === 'coordenacao');
+
   return (
     <main className="app-page">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Coordenacao</p>
+          <p className="eyebrow">{isProfessorOnly ? 'Professor' : 'Coordenacao'}</p>
           <h1>Presenca e creditos</h1>
         </div>
       </header>
@@ -280,7 +288,7 @@ export function PresencaPage() {
               </div>
             </div>
 
-            <table>
+            <table className="cards-table">
               <thead>
                 <tr>
                   <th>Aluno</th>
@@ -302,15 +310,15 @@ export function PresencaPage() {
 
                   return (
                     <tr key={student.id}>
-                      <td>{student.name}</td>
-                      <td>{student.enrollmentCode}</td>
-                      <td>
+                      <td data-label="Aluno">{student.name}</td>
+                      <td data-label="Matricula">{student.enrollmentCode}</td>
+                      <td data-label="Tipo">
                         <span className="status-chip">
                           {student.bookingType === 'experimental' ? 'Experimental' : 'Matriculado'}
                         </span>
                       </td>
-                      <td>{student.creditBalance}</td>
-                      <td>
+                      <td data-label="Saldo">{student.creditBalance}</td>
+                      <td data-label="Chamada">
                         <div className="row-actions">
                           <button
                             type="button"

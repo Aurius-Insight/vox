@@ -59,7 +59,14 @@ export function PortalLoginPage() {
         </div>
         <label>
           CPF
-          <input value={cpf} onChange={(event) => setCpf(event.target.value)} inputMode="numeric" />
+          <input
+            value={cpf}
+            onChange={(event) => setCpf(event.target.value.replace(/\D/g, '').slice(0, 11))}
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={11}
+            placeholder="Somente numeros"
+          />
         </label>
 
         {message && <p className="form-info">{message}</p>}
@@ -72,7 +79,9 @@ export function PortalLoginPage() {
           </div>
         )}
 
-        <button type="submit">Enviar link magico</button>
+        <button type="submit" disabled={cpf.length !== 11}>
+          Enviar link magico
+        </button>
       </form>
     </main>
   );
