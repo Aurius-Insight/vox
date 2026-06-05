@@ -1049,6 +1049,95 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+/* Calendario mensal da agenda. */
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+.calendar-month {
+  font-size: 1.1rem;
+  text-transform: capitalize;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.4rem;
+}
+.calendar-weekdays {
+  margin-bottom: 0.4rem;
+}
+.calendar-weekdays span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+}
+.calendar-cell {
+  min-height: 6.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.calendar-cell[data-other] {
+  opacity: 0.4;
+}
+.calendar-cell[data-today] {
+  border-color: var(--accent);
+}
+.calendar-daynum {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.calendar-cell[data-today] .calendar-daynum {
+  color: var(--accent-text);
+}
+.calendar-events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  overflow: hidden;
+}
+.calendar-event {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: none;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calendar-event:hover {
+  background: var(--accent);
+  color: #1a1a1a;
+}
+.calendar-event-time {
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .calendar-cell {
+    min-height: 4.2rem;
+  }
+  .calendar-event {
+    font-size: 0.62rem;
+  }
+}
+
 /* Seletor "Ver como" no rodape do sidebar (so diretor). */
 .view-as {
   display: grid;
