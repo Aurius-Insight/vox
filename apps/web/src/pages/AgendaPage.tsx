@@ -3,6 +3,7 @@ import { ApiClientError, api } from '../api/client';
 import type { AppUser, ClassSession, Subject, Unit } from '../api/types';
 import { formatDateTime, isoToLocalInput, localInputToIso } from '../lib/format';
 import { Modal } from '../components/Modal';
+import { AgendaCalendar } from '../components/AgendaCalendar';
 import { useToast } from '../components/ToastProvider';
 
 type ClassForm = {
@@ -39,6 +40,7 @@ export function AgendaPage() {
   const [units, setUnits] = useState<Unit[]>([]);
   const [form, setForm] = useState<ClassForm>(EMPTY_FORM);
   const [tab, setTab] = useState<'hoje' | 'proximas' | 'historico'>('hoje');
+  const [viewMode, setViewMode] = useState<'calendario' | 'lista'>('calendario');
   const toast = useToast();
 
   // Divide as aulas em 3 baldes pela data (Hoje, Proximas, Historico).
@@ -413,6 +415,27 @@ export function AgendaPage() {
         </Modal>
       )}
 
+      <nav className="detail-tabs" aria-label="Modo de visualizacao">
+        <button
+          type="button"
+          className={viewMode === 'calendario' ? 'is-active' : ''}
+          onClick={() => setViewMode('calendario')}
+        >
+          Calendario
+        </button>
+        <button
+          type="button"
+          className={viewMode === 'lista' ? 'is-active' : ''}
+          onClick={() => setViewMode('lista')}
+        >
+          Lista
+        </button>
+      </nav>
+
+      {viewMode === 'calendario' && <AgendaCalendar classes={classes} onSelect={startEdit} />}
+
+      {viewMode === 'lista' && (
+        <>
       <nav className="detail-tabs" aria-label="Filtro de aulas">
         <button
           type="button"
@@ -495,6 +518,8 @@ export function AgendaPage() {
           </tbody>
         </table>
       </section>
+        </>
+      )}
     </main>
   );
 }
