@@ -1021,6 +1021,17 @@ tbody tr:last-child td {
   padding: 0.45rem 0.8rem;
 }
 
+/* Ajuste manual de saldo na ficha do aluno (+ / -). */
+.credit-adjust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.credit-adjust input {
+  width: 5.5rem;
+}
+
 .app-page a {
   color: var(--accent-text);
   font-weight: 600;

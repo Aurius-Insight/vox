@@ -795,6 +795,69 @@ router.post(
   }),
 );
 
+const AdjustCreditsSchema = z.object({
+  // Pode ser negativo (subtrai). Inteiro, diferente de zero.
+  delta: z.coerce.number().int().refine((n) => n !== 0, 'Informe um valor diferente de zero.'),
+  reason: z.string().trim().max(200).optional(),
+});
+
+// Ajuste manual de saldo (+/-) pela ficha do aluno. Soma `delta` ao
+// creditBalance sem deixar negativo. Auditado (student.credit_adjusted).
+router.patch(
+  '/:studentId/credits',
+  requireAuth,
+  requireRole('diretor', 'coordenacao'),
+  asyncHandler(async (req, res) => {
+    const input = AdjustCreditsSchema.parse(req.body);
+    const unitScope = resolveUnitScope({ roles: req.user!.roles, unitId: req.user!.unitId });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const student = await tx.student.findFirst({
+        where: { id: req.params.studentId, active: true },
+      });
+      if (!student) return { ok: false as const, error: 'student_not_found' as const };
+      if (unitScope && student.unitId !== unitScope) {
+        return { ok: false as const, error: 'unit_scope' as const };
+      }
+
+      const novo = Math.max(0, student.creditBalance + input.delta);
+      const updated = await tx.student.update({
+        where: { id: student.id },
+        data: { creditBalance: novo },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: req.user!.id,
+          actorType: 'user',
+          entityType: 'student',
+          entityId: student.id,
+          action: 'student.credit_adjusted',
+          before: { creditBalance: student.creditBalance },
+          after: {
+            creditBalance: updated.creditBalance,
+            delta: input.delta,
+            reason: input.reason ?? null,
+          },
+        },
+      });
+
+      return { ok: true as const, creditBalance: updated.creditBalance };
+    });
+
+    if (!result.ok) {
+      const map: Record<string, { status: number; message: string }> = {
+        student_not_found: { status: 404, message: 'Aluno nao encontrado.' },
+        unit_scope: { status: 403, message: 'Aluno fora da sua unidade.' },
+      };
+      const mapped = map[result.error];
+      throw new ApiError(mapped.status, result.error, mapped.message);
+    }
+
+    res.json({ data: { creditBalance: result.creditBalance } });
+  }),
+);
+
 /**
  * Promove um aluno experimental pra matriculado. Atalho direto da ficha
  * do aluno: o operador escolhe o pacote (obrigatorio), opcionalmente CPF
