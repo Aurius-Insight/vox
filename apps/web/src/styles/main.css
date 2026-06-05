@@ -1049,15 +1049,26 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
 }
 
-/* Ajuste manual de saldo na ficha do aluno (+ / -). */
-.credit-adjust {
+/* Ajuste de saldo direto na coluna da lista de alunos (+ / -). */
+.saldo-cell {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
   align-items: center;
+  gap: 0.5rem;
 }
-.credit-adjust input {
-  width: 5.5rem;
+.saldo-value {
+  min-width: 1.5rem;
+}
+.saldo-buttons {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+.saldo-buttons button {
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  padding: 0;
+  line-height: 1;
+  font-size: 1.05rem;
+  border-radius: 999px;
 }
 
 .app-page a {

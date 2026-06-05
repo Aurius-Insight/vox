@@ -116,10 +116,16 @@ export function ProfessoresPage() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function openNew() {
-    setEditingId(undefined);
-    setForm(EMPTY_FORM);
-    setShowForm(true);
+  // Em vez de cadastrar manualmente, envia o link publico de cadastro de
+  // professor (a pessoa cria a propria conta com materia/senha).
+  async function copyCadastroLink() {
+    const url = `${window.location.origin}/cadastro-professor`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success('Link de cadastro de professor copiado!');
+    } catch {
+      toast.error('Nao foi possivel copiar: ' + url);
+    }
   }
 
   function startEdit(teacher: AppUser) {
@@ -222,8 +228,8 @@ export function ProfessoresPage() {
           <p className="eyebrow">Professores</p>
           <h1>Perfil do professor</h1>
         </div>
-        <button type="button" onClick={openNew}>
-          Novo professor
+        <button type="button" onClick={() => void copyCadastroLink()}>
+          Copiar link de cadastro
         </button>
       </header>
 
