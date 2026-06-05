@@ -161,6 +161,11 @@ export function AlunosPage() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
+  // Tokens dos links publicos de auto-cadastro (so a equipe ve, para copiar).
+  const [signupLinks, setSignupLinks] = useState<{
+    matriculado: string | null;
+    experimental: string | null;
+  }>();
 
   const load = useCallback(async () => {
     try {
@@ -182,6 +187,31 @@ export function AlunosPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Carrega os tokens dos links publicos de cadastro (diretor/coordenacao).
+  useEffect(() => {
+    if (!canOperate) return;
+    api<{ data: { matriculado: string | null; experimental: string | null } }>(
+      '/api/public/signup-links',
+    )
+      .then((response) => setSignupLinks(response.data))
+      .catch(() => setSignupLinks(undefined));
+  }, [canOperate]);
+
+  async function copySignupLink(type: 'matriculado' | 'experimental') {
+    const token = signupLinks?.[type];
+    if (!token) {
+      toast.error('Link nao configurado. Fale com o suporte.');
+      return;
+    }
+    const url = `${window.location.origin}/cadastro/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(`Link de cadastro (${type}) copiado!`);
+    } catch {
+      toast.error('Nao foi possivel copiar. Copie manualmente: ' + url);
+    }
+  }
 
   // Busca de leads no pipeline com debounce de 300ms. Leads ja matriculados
   // saem da lista — nao podem ser convertidos de novo.
@@ -511,6 +541,26 @@ export function AlunosPage() {
           <h1>Perfil do aluno</h1>
         </div>
         <div className="row-actions">
+          {canOperate && signupLinks?.matriculado && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void copySignupLink('matriculado')}
+              title="Copiar link publico de cadastro (matriculado)"
+            >
+              Copiar link · Matriculado
+            </button>
+          )}
+          {canOperate && signupLinks?.experimental && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void copySignupLink('experimental')}
+              title="Copiar link publico de cadastro (experimental)"
+            >
+              Copiar link · Experimental
+            </button>
+          )}
           {canOperate && (
             <button
               type="button"

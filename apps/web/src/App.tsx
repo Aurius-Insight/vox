@@ -17,6 +17,7 @@ import { MateriasPage } from './pages/MateriasPage';
 import { NoAccessPage } from './pages/NoAccessPage';
 import { PortalHomePage } from './pages/PortalHomePage';
 import { PortalLoginPage } from './pages/PortalLoginPage';
+import { PublicSignupPage } from './pages/PublicSignupPage';
 import { PresencaPage } from './pages/PresencaPage';
 import { ProfessoresPage } from './pages/ProfessoresPage';
 import { UnidadesPage } from './pages/UnidadesPage';
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/portal/entrar" element={<PortalLoginPage />} />
           <Route path="/portal" element={<PortalHomePage />} />
+          <Route path="/cadastro/:token" element={<PublicSignupPage />} />
 
           <Route element={<RequireAuth />}>
             <Route element={<Layout />}>

@@ -28,6 +28,11 @@ const EnvSchema = z.object({
   // Opcional: sem a chave, o envio do magic link via BotConversa fica como
   // no-op (e em dev o `devMagicLink` continua sendo devolvido na resposta).
   BOTCONVERSA_API_KEY: z.string().optional(),
+  // Tokens secretos dos links publicos de auto-cadastro (um por tipo de
+  // aluno). Sem eles, o endpoint publico responde 404 (feature desligada).
+  // Cada link tem a forma /cadastro/<token>; o token define o tipo do aluno.
+  PUBLIC_SIGNUP_TOKEN_MATRICULADO: z.string().min(16).optional(),
+  PUBLIC_SIGNUP_TOKEN_EXPERIMENTAL: z.string().min(16).optional(),
   // --- WhatsApp Cloud API (modo Coexistence/CoEx) ---
   // Todas opcionais: sem elas, o cliente (`lib/whatsapp.ts`) vira no-op e o
   // webhook segue respondendo a verificacao. Ver docs/PLANO_CHAT_COEX.md.
