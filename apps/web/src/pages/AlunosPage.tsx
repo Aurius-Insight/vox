@@ -129,6 +129,21 @@ export function AlunosPage() {
     else sorted.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     return sorted;
   }, [students, search, unitFilter, typeFilter, saldoFilter, sortOrder]);
+
+  // Paginacao client-side: 20 por pagina. Volta pra pagina 1 quando os
+  // filtros/busca mudam; `currentPage` fica preso ao total de paginas.
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setPage(1);
+  }, [search, unitFilter, typeFilter, saldoFilter, sortOrder]);
+  const pageCount = Math.max(1, Math.ceil(visibleStudents.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedStudents = visibleStudents.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
   const [form, setForm] = useState<StudentForm>(EMPTY_FORM);
   const [renewPackageId, setRenewPackageId] = useState('');
   const [renewSaving, setRenewSaving] = useState(false);
@@ -935,7 +950,7 @@ export function AlunosPage() {
                   </td>
                 </tr>
               )}
-              {visibleStudents.map((student) => (
+              {pagedStudents.map((student) => (
                 <tr
                   key={student.id}
                   className={selected?.id === student.id ? 'row-selected' : undefined}
@@ -986,6 +1001,29 @@ export function AlunosPage() {
               ))}
             </tbody>
           </table>
+          {pageCount > 1 && (
+            <div className="pagination">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                ← Anterior
+              </button>
+              <span className="muted-text">
+                Pagina {currentPage} de {pageCount}
+              </span>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={currentPage >= pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              >
+                Proxima →
+              </button>
+            </div>
+          )}
         </section>
 
         <aside className="detail-card">

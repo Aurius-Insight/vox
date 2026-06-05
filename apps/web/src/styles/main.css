@@ -1049,6 +1049,15 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+/* Paginacao da lista (Anterior / Pagina X de Y / Proxima). */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
 /* Ajuste de saldo direto na coluna da lista de alunos: − valor + */
 .saldo-cell {
   display: flex;
