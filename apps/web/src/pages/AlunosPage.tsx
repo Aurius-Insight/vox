@@ -951,32 +951,34 @@ export function AlunosPage() {
                   <td data-label="Escola">{student.unitName ?? '-'}</td>
                   <td data-label="Saldo">
                     <div className="saldo-cell">
+                      {canOperate && (
+                        <button
+                          type="button"
+                          className="saldo-btn"
+                          aria-label="Subtrair 1 aula"
+                          disabled={adjustingRowId === student.id || student.creditBalance <= 0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleRowAdjust(student.id, -1);
+                          }}
+                        >
+                          −
+                        </button>
+                      )}
                       <span className="saldo-value">{student.creditBalance}</span>
                       {canOperate && (
-                        <span className="saldo-buttons">
-                          <button
-                            type="button"
-                            aria-label="Subtrair 1 aula"
-                            disabled={adjustingRowId === student.id || student.creditBalance <= 0}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleRowAdjust(student.id, -1);
-                            }}
-                          >
-                            −
-                          </button>
-                          <button
-                            type="button"
-                            aria-label="Adicionar 1 aula"
-                            disabled={adjustingRowId === student.id}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleRowAdjust(student.id, 1);
-                            }}
-                          >
-                            +
-                          </button>
-                        </span>
+                        <button
+                          type="button"
+                          className="saldo-btn"
+                          aria-label="Adicionar 1 aula"
+                          disabled={adjustingRowId === student.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleRowAdjust(student.id, 1);
+                          }}
+                        >
+                          +
+                        </button>
                       )}
                     </div>
                   </td>
