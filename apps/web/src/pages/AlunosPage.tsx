@@ -11,7 +11,7 @@ import type {
   StudentSummary,
   Unit,
 } from '../api/types';
-import { formatDate, formatDateTime } from '../lib/format';
+import { formatDate, formatDateTime, whatsappLink } from '../lib/format';
 import { Modal } from '../components/Modal';
 import { HistoryKpis, HistoryTimeline } from '../components/StudentHistoryView';
 import { useToast } from '../components/ToastProvider';
@@ -884,7 +884,27 @@ export function AlunosPage() {
                     : `${selected.unitName ?? 'Sem unidade'} - ${selected.packageName} - ${selected.creditBalance} aulas restantes`}
                 </p>
                 <p className="muted-text">
-                  WhatsApp {selected.whatsapp ?? 'nao cadastrado'}
+                  {/* Numero abre o WhatsApp (wa.me), igual aos cards do CRM. */}
+                  WhatsApp{' '}
+                  {selected.whatsapp ? (
+                    (() => {
+                      const waLink = whatsappLink(selected.whatsapp);
+                      return waLink ? (
+                        <a
+                          className="text-link"
+                          href={waLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {selected.whatsapp}
+                        </a>
+                      ) : (
+                        selected.whatsapp
+                      );
+                    })()
+                  ) : (
+                    'nao cadastrado'
+                  )}
                   {selected.cpf ? ` - CPF ${selected.cpf}` : ''}
                   {selected.email ? ` - ${selected.email}` : ''}
                 </p>
