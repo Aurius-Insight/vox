@@ -210,13 +210,10 @@ export function AlunosPage() {
     }
   }
 
-  // Todos os links de cadastro para a equipe copiar e enviar.
+  // Links de cadastro de ALUNO (os de equipe ficam em Configuracoes).
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const cadastroLinks = [
     { label: 'Aluno', url: `${origin}/cadastro-alunos` },
-    { label: 'Professor', url: `${origin}/cadastro-professor` },
-    { label: 'Coordenacao', url: `${origin}/cadastro-coordenacao` },
-    { label: 'Administrador', url: `${origin}/cadastro-administrador` },
     ...(signupLinks?.matriculado
       ? [{ label: 'Aluno matriculado (token)', url: `${origin}/cadastro/${signupLinks.matriculado}` }]
       : []),
