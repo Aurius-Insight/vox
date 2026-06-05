@@ -5,9 +5,10 @@ import { prisma } from '../db/client.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { ApiError, asyncHandler, maskCpf, maskPhone } from '../lib/http.js';
 import { hashCpf, normalizeCpf } from '../lib/cpf.js';
-import { uniqueEnrollmentCode } from '../domain/enrollment.js';
+import { enrollmentStageSlug, uniqueEnrollmentCode } from '../domain/enrollment.js';
 import { resolveUnitScope } from '../domain/access.js';
 import { withEnrollmentCodeRetry } from '../lib/enrollment-retry.js';
+import { getLeadStageBySlug } from '../lib/lead-stage-cache.js';
 import {
   buildStudentTimeline,
   computeStudentKpis,
@@ -191,6 +192,40 @@ router.post(
         tx.student.findUnique({ where: { enrollmentCode: code } }).then((found) => found !== null),
       );
 
+      // "Student manda": todo aluno nasce vinculado a um lead, ja na etapa do
+      // CRM que corresponde ao tipo (matriculado -> matriculado, experimental
+      // -> experimental_agendada). Sem isto o cadastro direto nascia fora do
+      // funil e nunca aparecia no Kanban. Reaproveita um lead existente do
+      // mesmo whatsapp que ainda nao virou aluno, em vez de duplicar.
+      const targetStage = await getLeadStageBySlug(enrollmentStageSlug(input.type), tx);
+      const reusableLead = whatsappDigits
+        ? await tx.lead.findFirst({
+            where: { whatsapp: whatsappDigits, student: { is: null } },
+            select: { id: true },
+          })
+        : null;
+      const leadId = reusableLead
+        ? (
+            await tx.lead.update({
+              where: { id: reusableLead.id },
+              data: { stageId: targetStage.id },
+              select: { id: true },
+            })
+          ).id
+        : (
+            await tx.lead.create({
+              data: {
+                name: input.name,
+                whatsapp: whatsappDigits,
+                email: input.email,
+                unitInterest: unit.name,
+                source: 'cadastro_direto',
+                stageId: targetStage.id,
+              },
+              select: { id: true },
+            })
+          ).id;
+
       const student = await tx.student.create({
         data: {
           name: input.name,
@@ -204,6 +239,7 @@ router.post(
           packageName,
           creditBalance,
           active: true,
+          leadId,
         },
         include: { unit: { select: { name: true } } },
       });

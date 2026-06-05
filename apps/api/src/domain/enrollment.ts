@@ -1,6 +1,18 @@
 export type ConversionCheck = { ok: true } | { ok: false; reason: 'already_enrolled' };
 
 /**
+ * Etapa do CRM que corresponde ao tipo do aluno — a regra "Student manda":
+ * matriculado mora em `matriculado`, experimental em `experimental_agendada`.
+ * Fonte unica usada na conversao, no cadastro direto e no backfill, pra que a
+ * coluna do Kanban sempre reflita a matricula (e nao o funil do BotConversa).
+ */
+export function enrollmentStageSlug(
+  type: 'experimental' | 'matriculado',
+): 'experimental_agendada' | 'matriculado' {
+  return type === 'matriculado' ? 'matriculado' : 'experimental_agendada';
+}
+
+/**
  * Um lead pode ser convertido se ainda nao tem aluno OU se o aluno existente e
  * experimental — nesse caso a conversao apenas o "promove" a matriculado. So
  * bloqueia quando ja existe um aluno matriculado vinculado.
