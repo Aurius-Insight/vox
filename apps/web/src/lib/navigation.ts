@@ -8,8 +8,10 @@ export type NavItem = {
 
 /** Itens do menu lateral, na ordem de exibicao. */
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/dashboard', label: 'Dashboard', roles: ['diretor'] },
-  { to: '/vendas', label: 'Vendas', roles: ['diretor', 'coordenacao'] },
+  // Dashboard e Vendas (CRM) ocultos do menu a pedido. As rotas/paginas
+  // continuam existindo (App.tsx) — para reexibir, basta descomentar.
+  // { to: '/dashboard', label: 'Dashboard', roles: ['diretor'] },
+  // { to: '/vendas', label: 'Vendas', roles: ['diretor', 'coordenacao'] },
   { to: '/atendimento', label: 'Atendimento', roles: ['diretor', 'coordenacao', 'revisor'] },
   { to: '/coordenacao', label: 'Agenda', roles: ['diretor', 'coordenacao'] },
   {
