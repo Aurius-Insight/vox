@@ -1507,6 +1507,16 @@ tr.row-selected {
   text-decoration: underline;
 }
 
+/* Link de texto inline (ex.: numero de WhatsApp na ficha do aluno). */
+.text-link {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
 /* Aluno ja reservou: indicador inerte no lugar do botao (sem cancelamento). */
 .class-confirmed {
   align-items: center;
