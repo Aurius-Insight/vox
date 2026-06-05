@@ -56,6 +56,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, []);
 
+  // Sessao expirou enquanto a aba estava aberta: o client de API emite
+  // 'vox:unauthorized' em qualquer 401. So agimos saindo de 'authenticated'
+  // (transicao -> 'guest'), o que faz o RequireAuth redirecionar pro /login.
+  // 401 esperado (login com senha errada, /me inicial de visitante) nao mexe
+  // em nada porque o status ja nao e 'authenticated'.
+  useEffect(() => {
+    function onUnauthorized() {
+      setStatus((prev) => (prev === 'authenticated' ? 'guest' : prev));
+      setUser((prev) => (prev ? undefined : prev));
+    }
+    window.addEventListener('vox:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('vox:unauthorized', onUnauthorized);
+  }, []);
+
   const value = useMemo(
     () => ({ status, user, login, logout, refresh }),
     [status, user],
