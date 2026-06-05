@@ -1049,25 +1049,22 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
 }
 
-/* Ajuste de saldo direto na coluna da lista de alunos (+ / -). */
+/* Ajuste de saldo direto na coluna da lista de alunos: − valor + */
 .saldo-cell {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 .saldo-value {
+  min-width: 1.4rem;
+  text-align: center;
+}
+.saldo-btn {
   min-width: 1.5rem;
-}
-.saldo-buttons {
-  display: inline-flex;
-  gap: 0.25rem;
-}
-.saldo-buttons button {
-  min-width: 1.9rem;
-  min-height: 1.9rem;
+  min-height: 1.5rem;
   padding: 0;
   line-height: 1;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   border-radius: 999px;
 }
 
