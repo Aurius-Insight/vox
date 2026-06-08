@@ -2982,3 +2982,187 @@ tr.row-selected {
   transform: none;
   box-shadow: none;
 }
+
+/* ---- DateTimePicker (data + hora no mesmo painel) ---- */
+.dtp {
+  position: relative;
+  font-weight: 400;
+}
+
+.dtp-trigger {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-1);
+  color: var(--text);
+  display: flex;
+  font-weight: 400;
+  gap: 0.6rem;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0.66rem 0.9rem;
+  width: 100%;
+}
+
+.dtp-trigger:hover:not(:disabled) {
+  background: var(--surface-2);
+  box-shadow: var(--elevation-1);
+  transform: none;
+}
+
+.dtp-trigger:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-ring);
+}
+
+.dtp-trigger.is-placeholder span {
+  color: var(--text-soft);
+}
+
+.dtp-trigger svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Input invisivel (mas focavel) que carrega a validacao nativa `required`. */
+.dtp-validity {
+  position: absolute;
+  left: 12px;
+  bottom: 6px;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.dtp-panel {
+  position: absolute;
+  z-index: 20;
+  margin-top: 0.4rem;
+  width: max(100%, 280px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.dtp-cal-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.dtp-cal-head strong {
+  font-size: 0.92rem;
+}
+
+.dtp-nav {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  color: var(--text);
+  min-height: 32px;
+  padding: 0.25rem 0.45rem;
+}
+
+.dtp-nav:hover:not(:disabled) {
+  background: var(--surface-sunken);
+  box-shadow: none;
+  transform: none;
+}
+
+.dtp-weekdays,
+.dtp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+}
+
+.dtp-weekdays span {
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.dtp-day {
+  aspect-ratio: 1 / 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 500;
+  min-height: 0;
+  padding: 0;
+}
+
+.dtp-day:hover:not(:disabled) {
+  background: var(--surface-2);
+  box-shadow: none;
+  transform: none;
+}
+
+.dtp-day.is-outside {
+  color: var(--text-soft);
+}
+
+.dtp-day.is-today {
+  border-color: var(--border-strong);
+}
+
+.dtp-day.is-selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.dtp-day.is-selected:hover {
+  background: var(--accent-hover);
+}
+
+.dtp-time {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 0.6rem;
+  padding-top: 0.7rem;
+}
+
+.dtp-time label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.dtp-time input {
+  flex: 1;
+  min-height: 38px;
+}
+
+.dtp-clear {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  min-height: 38px;
+  padding: 0.3rem 0.8rem;
+}
+
+.dtp-clear:hover:not(:disabled) {
+  background: var(--surface-2);
+  box-shadow: none;
+  transform: none;
+}
