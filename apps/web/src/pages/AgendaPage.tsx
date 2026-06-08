@@ -4,6 +4,7 @@ import type { AppUser, ClassSession, Subject, Unit } from '../api/types';
 import { formatDateTime, isoToLocalInput, localInputToIso } from '../lib/format';
 import { Modal } from '../components/Modal';
 import { AgendaCalendar } from '../components/AgendaCalendar';
+import { DateTimePicker } from '../components/DateTimePicker';
 import { useToast } from '../components/ToastProvider';
 
 type ClassForm = {
@@ -265,19 +266,17 @@ export function AgendaPage() {
             </label>
             <label>
               Inicio
-              <input
-                type="datetime-local"
+              <DateTimePicker
                 value={editForm.startsAt}
-                onChange={(event) => updateEdit('startsAt', event.target.value)}
+                onChange={(value) => updateEdit('startsAt', value)}
                 required
               />
             </label>
             <label>
               Termino
-              <input
-                type="datetime-local"
+              <DateTimePicker
                 value={editForm.endsAt}
-                onChange={(event) => updateEdit('endsAt', event.target.value)}
+                onChange={(value) => updateEdit('endsAt', value)}
                 required
               />
             </label>
@@ -378,19 +377,17 @@ export function AgendaPage() {
             </label>
             <label>
               Inicio
-              <input
-                type="datetime-local"
+              <DateTimePicker
                 value={form.startsAt}
-                onChange={(event) => updateField('startsAt', event.target.value)}
+                onChange={(value) => updateField('startsAt', value)}
                 required
               />
             </label>
             <label>
               Termino
-              <input
-                type="datetime-local"
+              <DateTimePicker
                 value={form.endsAt}
-                onChange={(event) => updateField('endsAt', event.target.value)}
+                onChange={(value) => updateField('endsAt', value)}
                 required
               />
             </label>
