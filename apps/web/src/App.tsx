@@ -110,7 +110,7 @@ export default function App() {
                 <Route path="/professores" element={<ProfessoresPage />} />
               </Route>
 
-              <Route element={<RequireAuth roles={['diretor', 'coordenacao']} />}>
+              <Route element={<RequireAuth roles={['diretor']} />}>
                 <Route path="/unidades" element={<UnidadesPage />} />
               </Route>
 
